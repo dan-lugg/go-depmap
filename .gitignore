@@ -1,0 +1,62 @@
+# GoReleaser
+.goreleaser.yml.backup
+
+# Output files
+*.log
+graph.json
+deps.json
+
+# Profiling data
+*.mem
+*.cpu
+*.prof
+
+# Test coverage
+*.coverprofile
+*.cover
+coverage.html
+coverage.txt
+
+# Environment variables
+.env.*.local
+.env.local
+.env
+
+# IDE and Editor files
+.DS_Store
+*~
+*.swo
+*.swp
+.vscode/
+.idea/
+
+# Build artifacts
+*.zip
+*.tar.gz
+build/
+dist/
+bin/
+
+# Go workspace file
+go.work.sum
+go.work
+
+# Dependency directories (remove the comment below to include it)
+vendor/
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Test binary, built with `go test -c`
+*.test
+
+# Binaries
+*.dylib
+*.so
+*.dll
+*.exe~
+*.exe
+
+# Ignored
+.ignored/
+*.ignored
