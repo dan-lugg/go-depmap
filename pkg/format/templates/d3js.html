@@ -242,10 +242,15 @@
 
         const svg = d3.select("#graph")
             .attr("width", width)
-            .attr("height", height)
-            .call(d3.zoom().on("zoom", (event) => {
-                container.attr("transform", event.transform);
-            }));
+            .attr("height", height);
+
+        // Create container group first (needed for zoom)
+        const container = svg.append("g");
+
+        // Add zoom behavior
+        svg.call(d3.zoom().on("zoom", (event) => {
+            container.attr("transform", event.transform);
+        }));
 
         // Add arrow marker
         svg.append("defs").append("marker")
@@ -260,7 +265,6 @@
             .attr("d", "M 0,-5 L 10,0 L 0,5")
             .attr("fill", "#999");
 
-        const container = svg.append("g");
 
         // Create layers
         const groupLayer = container.append("g").attr("class", "groups");
@@ -285,7 +289,7 @@
         const nodeById = new Map(data.nodes.map((n, i) => [n.id, i]));
 
         // Prepare WebCola layout
-        const cola = new cola.Layout()
+        const colaLayout = new cola.Layout()
             .size([width, height])
             .nodes(data.nodes)
             .links(data.links.map(l => ({
@@ -300,7 +304,7 @@
 
         // Add groups if present
         if (data.groups && data.groups.length > 0) {
-            cola.groups(data.groups);
+            colaLayout.groups(data.groups);
         }
 
         // Create links
@@ -316,7 +320,6 @@
             .attr("class", "node")
             .attr("r", 8)
             .attr("fill", d => colorScale(d.group))
-            .call(cola.drag)
             .on("click", (event, d) => {
                 alert("Name: " + d.name + "\\nKind: " + d.kind + "\\nPackage: " + d.package + "\\nFile: " + d.file + ":" + d.line);
             })
@@ -372,7 +375,7 @@
         }
 
         // Update positions on tick
-        cola.on("tick", () => {
+        colaLayout.on("tick", () => {
             link.attr("d", d => {
                 const sourceNode = data.nodes[nodeById.get(d.source)];
                 const targetNode = data.nodes[nodeById.get(d.target)];
@@ -411,7 +414,22 @@
 
         // Start layout
         updateGroups();
-        cola.start(50, 100, 200);
+        colaLayout.start(50, 100, 200);
+
+        // Add drag behavior to nodes after layout starts
+        node.call(d3.drag()
+            .on("start", function(event, d) {
+                d.fixed = 1;
+            })
+            .on("drag", function(event, d) {
+                d.x = event.x;
+                d.y = event.y;
+                colaLayout.resume();
+            })
+            .on("end", function(event, d) {
+                d.fixed = 0;
+            })
+        );
 
         // Controls
         document.getElementById("showLabels").addEventListener("change", (e) => {
@@ -423,7 +441,7 @@
         });
 
         document.getElementById("resetBtn").addEventListener("click", () => {
-            cola.start(50, 100, 200);
+            colaLayout.start(50, 100, 200);
         });
     </script>
 </body>
