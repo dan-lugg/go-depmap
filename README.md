@@ -56,7 +56,9 @@ Analyze the current directory and output pretty JSON to STDOUT:
 - `-config <json>`: JSON configuration object for the formatter (default: "{}")
     - Available config options:
         - `pretty` (bool): Enable pretty-printed output (default: true)
-        - `groupPackages` (bool): Group nodes by package in D3.js format (default: true)
+        - `groupByPackage` (bool): WebCola hierarchical package grouping (default: true)
+        - `groupByType` (bool): WebCola type-level grouping for methods by receiver (default: true)
+        - `htmlPage` (bool): Generate self-contained HTML page with embedded visualization (default: false, d3js format only)
 
 ### Examples
 
@@ -72,16 +74,35 @@ Generate minified JSON output:
 ./go-depmap -format=json -config='{"pretty":false}'
 ```
 
-Generate D3.js output without package grouping:
+Generate D3.js with WebCola hierarchical grouping (package and type level):
 
 ```bash
-./go-depmap -format=d3js -config='{"groupPackages":false}'
+./go-depmap -format=d3js -config='{"groupByPackage":true,"groupByType":true}'
 ```
 
-Generate minified D3.js output:
+Generate D3.js without type-level grouping (flat package groups):
 
 ```bash
-./go-depmap -format=d3js -config='{"pretty":false,"groupPackages":true}'
+./go-depmap -format=d3js -config='{"groupByPackage":true,"groupByType":false}'
+```
+
+Generate D3.js without any grouping:
+
+```bash
+./go-depmap -format=d3js -config='{"groupByPackage":false,"groupByType":false}'
+```
+
+Generate minified D3.js output with all grouping enabled:
+
+```bash
+./go-depmap -format=d3js -config='{"pretty":false,"groupByPackage":true,"groupByType":true}'
+```
+
+Generate self-contained HTML page with embedded visualization:
+
+```bash
+./go-depmap -format=d3js -config='{"htmlPage":true}' > visualization.html
+# Open visualization.html in your browser - no server needed!
 ```
 
 Generate D3.js-compatible output and save to file:
@@ -130,7 +151,7 @@ The default format with two main sections:
 
 ### D3.js Format (d3js)
 
-Compatible with D3.js force-directed graph visualizations with **convex hull package grouping**:
+Compatible with D3.js force-directed graph visualizations with **WebCola hierarchical grouping**:
 
 ```json
 {
@@ -154,14 +175,21 @@ Compatible with D3.js force-directed graph visualizations with **convex hull pac
       "value": 1
     }
   ],
-  "packages": [
+  "groups": [
+    {
+      "id": "example.com/myapp/utils::MyType",
+      "label": "MyType",
+      "leaves": [2, 3],
+      "level": "type",
+      "padding": 15
+    },
     {
       "id": "example.com/myapp/utils",
       "label": "example.com/myapp/utils",
-      "nodes": [
-        "example.com/myapp/utils::Helper",
-        "example.com/myapp/utils::Config"
-      ]
+      "leaves": [0, 1],
+      "groups": [0],
+      "level": "package",
+      "padding": 25
     }
   ]
 }
@@ -169,11 +197,16 @@ Compatible with D3.js force-directed graph visualizations with **convex hull pac
 
 **Features:**
 - **Node groups**: function=1, method=2, type=3 (useful for coloring in visualizations)
-- **Package grouping**: Nodes are grouped by their fully qualified package name
-- **Convex hull support**: The `packages` array enables visual grouping with convex hulls
-- **Interactive visualization**: Includes `index.html` for interactive D3.js visualization with package boundaries
+- **WebCola `groups` array**: Hierarchical constraint-based grouping
+  - **Package-level groups**: Contain all nodes/types from a package
+  - **Type-level groups**: Nested groups containing methods for a receiver type
+  - **`leaves`**: Array of node indices belonging to the group
+  - **`groups`**: Array of nested group indices
+  - **`level`**: "package" or "type" for styling/layout
+  - **`padding`**: Recommended padding in pixels for rectangular bounds
+- **Interactive visualization**: Self-contained HTML page generation with embedded D3.js/WebCola
 
-See [PACKAGE_GROUPING.md](PACKAGE_GROUPING.md) for detailed information about the package grouping feature.
+See [PACKAGE_GROUPING.md](PACKAGE_GROUPING.md) for detailed information about the grouping feature.
 
 ## Visualization
 
@@ -195,7 +228,7 @@ The tool includes an interactive D3.js visualization (`index.html`) that display
 
 ### Features
 
-- **Package Grouping**: Visual boundaries (convex hulls) around nodes from the same package
+- **Package Grouping**: Visual boundaries (rectangles) around nodes from the same package
 - **Interactive Controls**: Adjust force simulation, node size, and toggle labels
 - **Color Coding**: Functions (orange), Methods (blue), Types (green)
 - **Drag & Zoom**: Rearrange nodes and explore large graphs

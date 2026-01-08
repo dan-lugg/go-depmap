@@ -19,7 +19,7 @@ func main() {
 	// CLI Flags
 	sourcePtr := flag.String("source", ".", "The directory of the Go project to analyze")
 	formatPtr := flag.String("format", "json", "Output format: json, d3js")
-	configPtr := flag.String("config", "{}", "JSON configuration object for the formatter (e.g., {\"pretty\":true,\"groupPackages\":true})")
+	configPtr := flag.String("config", "{}", "JSON configuration object for the formatter (e.g., {\"pretty\":true,\"groupByPackage\":true})")
 	flag.Parse()
 
 	log.Printf("Analyzing project in: %s", *sourcePtr)

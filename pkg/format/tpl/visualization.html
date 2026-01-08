@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go Dependency Graph - WebCola Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/webcola@3.4.0/WebCola/cola.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e1e;
+            color: #fff;
+            overflow: hidden;
+        }
+
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            z-index: 100;
+            max-width: 300px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        #controls h3 {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 8px;
+        }
+
+        #controls label {
+            display: block;
+            margin: 8px 0;
+            font-size: 12px;
+        }
+
+        #controls input[type="checkbox"] {
+            margin-right: 8px;
+        }
+
+        #controls button {
+            width: 100%;
+            margin-top: 10px;
+            padding: 8px;
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        #controls button:hover {
+            background-color: #006cbd;
+        }
+
+        #info {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.9);
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            max-width: 400px;
+            z-index: 100;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        #legend {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            z-index: 100;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        #legend h4 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+            font-size: 12px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 8px;
+            border: 2px solid #fff;
+        }
+
+        .link {
+            stroke: #999;
+            stroke-opacity: 0.6;
+            stroke-width: 1.5px;
+            fill: none;
+            marker-end: url(#arrowhead);
+        }
+
+        .node {
+            cursor: pointer;
+            stroke: #fff;
+            stroke-width: 1.5px;
+        }
+
+        .node:hover {
+            stroke: #ffa500;
+            stroke-width: 3px;
+        }
+
+        .label {
+            font-size: 9px;
+            fill: #ccc;
+            pointer-events: none;
+            text-anchor: middle;
+            user-select: none;
+        }
+
+        .group-rect {
+            fill: none;
+            stroke-width: 2px;
+            rx: 8;
+            ry: 8;
+            pointer-events: none;
+        }
+
+        .group-rect.package {
+            stroke: #0078d4;
+            fill: rgba(0, 120, 212, 0.1);
+        }
+
+        .group-rect.type {
+            stroke: #00d488;
+            fill: rgba(0, 212, 136, 0.1);
+        }
+
+        .group-label {
+            font-size: 11px;
+            font-weight: bold;
+            pointer-events: none;
+            text-shadow: 0 0 3px #000, 0 0 3px #000;
+        }
+
+        .group-label.package {
+            fill: #0078d4;
+        }
+
+        .group-label.type {
+            fill: #00d488;
+        }
+
+        .tooltip {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.95);
+            color: #fff;
+            padding: 12px;
+            border-radius: 6px;
+            pointer-events: none;
+            font-size: 12px;
+            z-index: 1000;
+            max-width: 350px;
+            word-wrap: break-word;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+            border: 1px solid #444;
+            display: none;
+        }
+
+        .tooltip strong {
+            color: #00d488;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="controls">
+            <h3>⚙️ Controls</h3>
+            <label>
+                <input type="checkbox" id="showLabels" checked> Show Node Labels
+            </label>
+            <label>
+                <input type="checkbox" id="showGroups" checked> Show Group Boundaries
+            </label>
+            <button id="resetBtn">Reset Layout</button>
+        </div>
+
+        <div id="legend">
+            <h4>📊 Legend</h4>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #FF9800;"></div>
+                <span>Functions</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #2196F3;"></div>
+                <span>Methods</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #4CAF50;"></div>
+                <span>Types</span>
+            </div>
+        </div>
+
+        <div id="info">
+            <strong>Go Dependency Graph</strong><br>
+            Nodes: <span id="nodeCount">0</span> | Links: <span id="linkCount">0</span> | Groups: <span id="groupCount">0</span><br>
+            <small>💡 Drag nodes • Zoom with wheel • Click for details</small>
+        </div>
+        <svg id="graph"></svg>
+    </div>
+    <div class="tooltip" id="tooltip"></div>
+
+    <script>
+        // Embedded data - will be injected by Go template
+        const data = {{.Data}};
+
+        console.log("Loaded data:", data);
+
+        // Set up SVG
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        const svg = d3.select("#graph")
+            .attr("width", width)
+            .attr("height", height)
+            .call(d3.zoom().on("zoom", (event) => {
+                container.attr("transform", event.transform);
+            }));
+
+        // Add arrow marker
+        svg.append("defs").append("marker")
+            .attr("id", "arrowhead")
+            .attr("viewBox", "-0 -5 10 10")
+            .attr("refX", 20)
+            .attr("refY", 0)
+            .attr("orient", "auto")
+            .attr("markerWidth", 6)
+            .attr("markerHeight", 6)
+            .append("path")
+            .attr("d", "M 0,-5 L 10,0 L 0,5")
+            .attr("fill", "#999");
+
+        const container = svg.append("g");
+
+        // Create layers
+        const groupLayer = container.append("g").attr("class", "groups");
+        const linkLayer = container.append("g").attr("class", "links");
+        const nodeLayer = container.append("g").attr("class", "nodes");
+        const labelLayer = container.append("g").attr("class", "labels");
+
+        // Color scale
+        const colorScale = d3.scaleOrdinal()
+            .domain([1, 2, 3])
+            .range(["#FF9800", "#2196F3", "#4CAF50"]);
+
+        // Update info
+        document.getElementById("nodeCount").textContent = data.nodes.length;
+        document.getElementById("linkCount").textContent = data.links.length;
+        document.getElementById("groupCount").textContent = (data.groups || []).length;
+
+        // Tooltip
+        const tooltip = d3.select("#tooltip");
+
+        // Create node lookup
+        const nodeById = new Map(data.nodes.map((n, i) => [n.id, i]));
+
+        // Prepare WebCola layout
+        const cola = new cola.Layout()
+            .size([width, height])
+            .nodes(data.nodes)
+            .links(data.links.map(l => ({
+                source: nodeById.get(l.source),
+                target: nodeById.get(l.target)
+            })))
+            .avoidOverlaps(true)
+            .handleDisconnected(true)
+            .convergenceThreshold(1e-3)
+            .linkDistance(100)
+            .symmetricDiffLinkLengths(5);
+
+        // Add groups if present
+        if (data.groups && data.groups.length > 0) {
+            cola.groups(data.groups);
+        }
+
+        // Create links
+        const link = linkLayer.selectAll("path")
+            .data(data.links)
+            .enter().append("path")
+            .attr("class", "link");
+
+        // Create nodes
+        const node = nodeLayer.selectAll("circle")
+            .data(data.nodes)
+            .enter().append("circle")
+            .attr("class", "node")
+            .attr("r", 8)
+            .attr("fill", d => colorScale(d.group))
+            .call(cola.drag)
+            .on("click", (event, d) => {
+                alert("Name: " + d.name + "\\nKind: " + d.kind + "\\nPackage: " + d.package + "\\nFile: " + d.file + ":" + d.line);
+            })
+            .on("mouseover", (event, d) => {
+                tooltip.style("display", "block")
+                    .html("<strong>" + d.name + "</strong><br>" +
+                           "Kind: " + d.kind + "<br>" +
+                           "Package: " + d.package + "<br>" +
+                           "File: " + d.file + ":" + d.line)
+                    .style("left", (event.pageX + 10) + "px")
+                    .style("top", (event.pageY + 10) + "px");
+            })
+            .on("mousemove", (event) => {
+                tooltip.style("left", (event.pageX + 10) + "px")
+                    .style("top", (event.pageY + 10) + "px");
+            })
+            .on("mouseout", () => {
+                tooltip.style("display", "none");
+            });
+
+        // Create labels
+        const label = labelLayer.selectAll("text")
+            .data(data.nodes)
+            .enter().append("text")
+            .attr("class", "label")
+            .text(d => d.name);
+
+        // Group rectangles
+        let groupRects, groupLabels;
+
+        function updateGroups() {
+            if (!document.getElementById("showGroups").checked) {
+                groupLayer.selectAll("*").remove();
+                return;
+            }
+
+            if (!data.groups || data.groups.length === 0) return;
+
+            groupLayer.selectAll("*").remove();
+
+            groupRects = groupLayer.selectAll("rect")
+                .data(data.groups)
+                .enter().append("rect")
+                .attr("class", d => "group-rect " + d.level)
+                .attr("rx", 8)
+                .attr("ry", 8);
+
+            groupLabels = groupLayer.selectAll("text")
+                .data(data.groups)
+                .enter().append("text")
+                .attr("class", d => "group-label " + d.level)
+                .text(d => d.label.split('/').pop());
+        }
+
+        // Update positions on tick
+        cola.on("tick", () => {
+            link.attr("d", d => {
+                const sourceNode = data.nodes[nodeById.get(d.source)];
+                const targetNode = data.nodes[nodeById.get(d.target)];
+                return "M" + sourceNode.x + "," + sourceNode.y + "L" + targetNode.x + "," + targetNode.y;
+            });
+
+            node
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y);
+
+            label
+                .attr("x", d => d.x)
+                .attr("y", d => d.y + 20);
+
+            // Update group rectangles
+            if (groupRects && data.groups) {
+                groupRects.each(function(d) {
+                    if (d.bounds) {
+                        d3.select(this)
+                            .attr("x", d.bounds.x)
+                            .attr("y", d.bounds.y)
+                            .attr("width", d.bounds.width())
+                            .attr("height", d.bounds.height());
+                    }
+                });
+
+                groupLabels.each(function(d) {
+                    if (d.bounds) {
+                        d3.select(this)
+                            .attr("x", d.bounds.x + 10)
+                            .attr("y", d.bounds.y + 20);
+                    }
+                });
+            }
+        });
+
+        // Start layout
+        updateGroups();
+        cola.start(50, 100, 200);
+
+        // Controls
+        document.getElementById("showLabels").addEventListener("change", (e) => {
+            label.style("display", e.target.checked ? "block" : "none");
+        });
+
+        document.getElementById("showGroups").addEventListener("change", () => {
+            updateGroups();
+        });
+
+        document.getElementById("resetBtn").addEventListener("click", () => {
+            cola.start(50, 100, 200);
+        });
+    </script>
+</body>
+</html>
+

@@ -1,11 +1,16 @@
 package format
 
 import (
+	"embed"
 	"encoding/json"
+	"html/template"
 	"io"
 
 	"go-depmap/pkg/graph"
 )
+
+//go:embed tpl/visualization.html
+var templateFS embed.FS
 
 // D3JSNode represents a node in D3.js force-directed graph format
 type D3JSNode struct {
@@ -27,28 +32,39 @@ type D3JSLink struct {
 	Value  int    `json:"value"` // Weight of the edge (can be used for styling)
 }
 
-// D3JSPackageGroup represents a package group for convex hull visualization
-type D3JSPackageGroup struct {
-	ID    string   `json:"id"`    // Fully qualified package name
-	Label string   `json:"label"` // Display label for the package
-	Nodes []string `json:"nodes"` // IDs of nodes belonging to this package
+// D3JSGroup represents a hierarchical group for WebCola constraint-based layout
+type D3JSGroup struct {
+	ID      string `json:"id"`               // Unique identifier for the group
+	Label   string `json:"label"`            // Display label
+	Leaves  []int  `json:"leaves,omitempty"` // Indices of nodes in this group
+	Groups  []int  `json:"groups,omitempty"` // Indices of nested groups
+	Level   string `json:"level"`            // "package" or "type"
+	Padding int    `json:"padding"`          // Padding around the group in pixels
 }
 
-// D3JSGraph is the D3.js compatible graph structure with package grouping
+// D3JSGraph is the D3.js compatible graph structure with hierarchical grouping
 type D3JSGraph struct {
-	Nodes    []D3JSNode         `json:"nodes"`
-	Links    []D3JSLink         `json:"links"`
-	Packages []D3JSPackageGroup `json:"packages"` // Package groups for convex hull rendering
+	Nodes  []D3JSNode  `json:"nodes"`
+	Links  []D3JSLink  `json:"links"`
+	Groups []D3JSGroup `json:"groups,omitempty"` // Hierarchical groups for WebCola layout
 }
 
 // D3JSWriter writes the graph in D3.js force-directed graph format
 type D3JSWriter struct{}
 
-func (w *D3JSWriter) Write(writer io.Writer, graph *graph.DependencyGraph, config Config) error {
-	// Check if package grouping is enabled (defaults to true for backward compatibility)
-	groupPackages := config.GetBool("groupPackages", true)
+func (w *D3JSWriter) Write(writer io.Writer, depGraph *graph.DependencyGraph, config Config) error {
+	// Check grouping options (all default to true)
+	groupByPackage := config.GetBool("groupByPackage", true) // WebCola package grouping
+	groupByType := config.GetBool("groupByType", true)       // WebCola type-level grouping
 
-	d3Graph := convertToD3Format(graph, groupPackages)
+	d3Graph := convertToD3Format(depGraph, groupByPackage, groupByType)
+
+	// Check if HTML page output is requested
+	if config.GetBool("htmlPage", false) {
+		return writeHTMLPage(writer, d3Graph)
+	}
+
+	// Otherwise output JSON
 	enc := json.NewEncoder(writer)
 
 	// Check if pretty printing is enabled (defaults to true)
@@ -60,11 +76,11 @@ func (w *D3JSWriter) Write(writer io.Writer, graph *graph.DependencyGraph, confi
 }
 
 // convertToD3Format converts a DependencyGraph to D3.js format with optional package grouping
-func convertToD3Format(graph *graph.DependencyGraph, groupPackages bool) *D3JSGraph {
+func convertToD3Format(depGraph *graph.DependencyGraph, groupByPackage bool, groupByType bool) *D3JSGraph {
 	d3Graph := &D3JSGraph{
-		Nodes:    make([]D3JSNode, 0, len(graph.Nodes)),
-		Links:    make([]D3JSLink, 0),
-		Packages: make([]D3JSPackageGroup, 0),
+		Nodes:  make([]D3JSNode, 0, len(depGraph.Nodes)),
+		Links:  make([]D3JSLink, 0),
+		Groups: make([]D3JSGroup, 0),
 	}
 
 	// Map to assign group numbers based on kind
@@ -74,11 +90,14 @@ func convertToD3Format(graph *graph.DependencyGraph, groupPackages bool) *D3JSGr
 		"type":     3,
 	}
 
-	// Map to track packages and their nodes
-	packageNodes := make(map[string][]string)
+	// Maps for tracking grouping
+	packageNodes := make(map[string][]string)                // package -> node IDs
+	nodeIndexMap := make(map[string]int)                     // node ID -> array index
+	packageTypeNodes := make(map[string]map[string][]string) // package -> type -> node IDs
+	typeToPackage := make(map[string]string)                 // type -> package
 
-	// Convert nodes
-	for _, node := range graph.Nodes {
+	// Convert nodes and build index maps
+	for _, node := range depGraph.Nodes {
 		group := kindToGroup[string(node.Kind)]
 		d3Node := D3JSNode{
 			ID:        node.ID,
@@ -89,35 +108,181 @@ func convertToD3Format(graph *graph.DependencyGraph, groupPackages bool) *D3JSGr
 			Line:      node.Line,
 			Signature: node.Signature,
 			Group:     group,
-			PackageID: node.Package, // Use fully qualified package name
+			PackageID: node.Package,
 		}
-		d3Graph.Nodes = append(d3Graph.Nodes, d3Node)
 
-		// Track which nodes belong to which package
+		nodeIndex := len(d3Graph.Nodes)
+		d3Graph.Nodes = append(d3Graph.Nodes, d3Node)
+		nodeIndexMap[node.ID] = nodeIndex
+
+		// Track nodes by package
 		packageNodes[node.Package] = append(packageNodes[node.Package], node.ID)
+
+		// Track methods by their receiver type
+		if node.Kind == graph.KindMethod {
+			// Extract receiver type from method name (format: "(*Type).method" or "Type.method")
+			receiverType := extractReceiverType(node.Name)
+			if receiverType != "" {
+				if packageTypeNodes[node.Package] == nil {
+					packageTypeNodes[node.Package] = make(map[string][]string)
+				}
+				packageTypeNodes[node.Package][receiverType] = append(packageTypeNodes[node.Package][receiverType], node.ID)
+				typeToPackage[receiverType] = node.Package
+			}
+		}
+
+		// Track type declarations
+		if node.Kind == graph.KindType {
+			typeToPackage[node.Name] = node.Package
+		}
 	}
 
 	// Convert edges
-	for sourceID, targets := range graph.Edges {
+	for sourceID, targets := range depGraph.Edges {
 		for _, targetID := range targets {
 			d3Graph.Links = append(d3Graph.Links, D3JSLink{
 				Source: sourceID,
 				Target: targetID,
-				Value:  1, // Default weight
+				Value:  1,
 			})
 		}
 	}
 
-	// Build package groups for convex hull rendering (only if enabled)
-	if groupPackages {
+	// Build WebCola-compatible hierarchical groups
+	if groupByPackage {
 		for pkgName, nodeIDs := range packageNodes {
-			d3Graph.Packages = append(d3Graph.Packages, D3JSPackageGroup{
-				ID:    pkgName,
-				Label: pkgName,
-				Nodes: nodeIDs,
-			})
+			// Collect leaf nodes (non-method nodes or methods without type grouping)
+			var packageLeaves []int
+			var nestedTypeGroupIndices []int
+
+			// If type grouping is enabled, separate methods by type
+			if groupByType && packageTypeNodes[pkgName] != nil {
+				// Add non-method nodes as direct leaves
+				for _, nodeID := range nodeIDs {
+					idx := nodeIndexMap[nodeID]
+					node := d3Graph.Nodes[idx]
+					if node.Kind != "method" {
+						packageLeaves = append(packageLeaves, idx)
+					}
+				}
+
+				// Create type groups for methods
+				for typeName, methodIDs := range packageTypeNodes[pkgName] {
+					if len(methodIDs) > 0 {
+						// Get indices for methods
+						var typeLeaves []int
+						for _, methodID := range methodIDs {
+							if idx, ok := nodeIndexMap[methodID]; ok {
+								typeLeaves = append(typeLeaves, idx)
+							}
+						}
+
+						// Store the index where this type group will be added
+						typeGroupIndex := len(d3Graph.Groups)
+
+						// Add type group
+						d3Graph.Groups = append(d3Graph.Groups, D3JSGroup{
+							ID:      pkgName + "::" + typeName,
+							Label:   typeName,
+							Leaves:  typeLeaves,
+							Level:   "type",
+							Padding: 15,
+						})
+
+						nestedTypeGroupIndices = append(nestedTypeGroupIndices, typeGroupIndex)
+					}
+				}
+			} else {
+				// No type grouping - all nodes are direct leaves
+				for _, nodeID := range nodeIDs {
+					if idx, ok := nodeIndexMap[nodeID]; ok {
+						packageLeaves = append(packageLeaves, idx)
+					}
+				}
+			}
+
+			// Add package group
+			packageGroup := D3JSGroup{
+				ID:      pkgName,
+				Label:   pkgName,
+				Leaves:  packageLeaves,
+				Groups:  nestedTypeGroupIndices,
+				Level:   "package",
+				Padding: 25,
+			}
+			d3Graph.Groups = append(d3Graph.Groups, packageGroup)
 		}
 	}
 
 	return d3Graph
+}
+
+// extractReceiverType extracts the receiver type name from a method name
+// Handles formats: "(*Type).method" or "Type.method"
+func extractReceiverType(methodName string) string {
+	// Look for pattern: (optional *)(Type).method
+	if idx := len(methodName); idx > 0 {
+		// Find the first dot (method separator)
+		dotIdx := -1
+		parenDepth := 0
+		for i, ch := range methodName {
+			if ch == '(' {
+				parenDepth++
+			} else if ch == ')' {
+				parenDepth--
+			} else if ch == '.' && parenDepth == 0 {
+				dotIdx = i
+				break
+			}
+		}
+
+		if dotIdx > 0 {
+			receiver := methodName[:dotIdx]
+			// Remove (*  or (
+			receiver = trimReceiverParens(receiver)
+			return receiver
+		}
+	}
+	return ""
+}
+
+// trimReceiverParens removes parentheses and pointer markers from receiver
+func trimReceiverParens(receiver string) string {
+	// Remove leading (* or (
+	if len(receiver) > 0 && receiver[0] == '(' {
+		receiver = receiver[1:]
+		if len(receiver) > 0 && receiver[0] == '*' {
+			receiver = receiver[1:]
+		}
+	}
+	// Remove trailing )
+	if len(receiver) > 0 && receiver[len(receiver)-1] == ')' {
+		receiver = receiver[:len(receiver)-1]
+	}
+	return receiver
+}
+
+// writeHTMLPage generates a self-contained HTML page with embedded D3.js/WebCola visualization
+func writeHTMLPage(writer io.Writer, d3Graph *D3JSGraph) error {
+	// Parse the embedded template
+	tmpl, err := template.ParseFS(templateFS, "tpl/visualization.html")
+	if err != nil {
+		return err
+	}
+
+	// Marshal the graph data to JSON
+	jsonData, err := json.Marshal(d3Graph)
+	if err != nil {
+		return err
+	}
+
+	// Prepare template data
+	data := struct {
+		Data template.JS
+	}{
+		Data: template.JS(jsonData),
+	}
+
+	// Execute the template
+	return tmpl.Execute(writer, data)
 }

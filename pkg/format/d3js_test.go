@@ -82,7 +82,7 @@ func Test_D3JSWriter_Write(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			w := &D3JSWriter{}
 			var buf bytes.Buffer
-			config := Config{"groupPackages": true, "pretty": true}
+			config := Config{"pretty": true}
 
 			err := w.Write(&buf, tt.graph, config)
 			if (err != nil) != tt.wantErr {
@@ -200,7 +200,7 @@ func Test_ConvertToD3Format(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := convertToD3Format(tt.graph, true)
+			result := convertToD3Format(tt.graph, true, true)
 
 			if len(result.Nodes) != tt.expectedNodes {
 				t.Errorf("Node count = %d, want %d", len(result.Nodes), tt.expectedNodes)
@@ -236,7 +236,7 @@ func Test_D3JSNode_GroupAssignment(t *testing.T) {
 				Edges: make(map[string][]string),
 			}
 
-			result := convertToD3Format(g, true)
+			result := convertToD3Format(g, true, true)
 
 			if len(result.Nodes) != 1 {
 				t.Fatalf("Expected 1 node, got %d", len(result.Nodes))
@@ -327,41 +327,23 @@ func Test_ConvertToD3Format_PackageGrouping(t *testing.T) {
 		},
 	}
 
-	result := convertToD3Format(graph, true)
+	result := convertToD3Format(graph, true, true)
 
-	// Verify packages array exists
-	if result.Packages == nil {
-		t.Fatal("Packages array is nil")
-	}
-
-	// Should have 2 packages
-	if len(result.Packages) != 2 {
-		t.Errorf("Expected 2 packages, got %d", len(result.Packages))
+	// Verify groups array exists
+	if result.Groups == nil {
+		t.Fatal("Groups array is nil")
 	}
 
-	// Verify package grouping
-	packageMap := make(map[string]D3JSPackageGroup)
-	for _, pkg := range result.Packages {
-		packageMap[pkg.ID] = pkg
+	// Should have 2 package groups (one for each package)
+	packageGroups := 0
+	for _, g := range result.Groups {
+		if g.Level == "package" {
+			packageGroups++
+		}
 	}
 
-	pkg1, ok := packageMap["example.com/pkg1"]
-	if !ok {
-		t.Error("Package example.com/pkg1 not found")
-	}
-	if ok && len(pkg1.Nodes) != 2 {
-		t.Errorf("Package pkg1 should have 2 nodes, got %d", len(pkg1.Nodes))
-	}
-	if ok && pkg1.Label != "example.com/pkg1" {
-		t.Errorf("Package label mismatch: got %s, want example.com/pkg1", pkg1.Label)
-	}
-
-	pkg2, ok := packageMap["example.com/pkg2"]
-	if !ok {
-		t.Error("Package example.com/pkg2 not found")
-	}
-	if ok && len(pkg2.Nodes) != 1 {
-		t.Errorf("Package pkg2 should have 1 node, got %d", len(pkg2.Nodes))
+	if packageGroups != 2 {
+		t.Errorf("Expected 2 package groups, got %d", packageGroups)
 	}
 
 	// Verify all nodes have package_id set
@@ -374,4 +356,131 @@ func Test_ConvertToD3Format_PackageGrouping(t *testing.T) {
 				node.ID, node.PackageID, node.Package)
 		}
 	}
+}
+
+func Test_ConvertToD3Format_HierarchicalGrouping(t *testing.T) {
+	graph := &graph.DependencyGraph{
+		Nodes: map[string]*graph.Node{
+			"pkg1::func1": {
+				ID:      "pkg1::func1",
+				Name:    "func1",
+				Kind:    graph.KindFunction,
+				Package: "example.com/pkg1",
+			},
+			"pkg1::Type1": {
+				ID:      "pkg1::Type1",
+				Name:    "Type1",
+				Kind:    graph.KindType,
+				Package: "example.com/pkg1",
+			},
+			"pkg1::(*Type1).Method1": {
+				ID:      "pkg1::(*Type1).Method1",
+				Name:    "(*Type1).Method1",
+				Kind:    graph.KindMethod,
+				Package: "example.com/pkg1",
+			},
+			"pkg1::(*Type1).Method2": {
+				ID:      "pkg1::(*Type1).Method2",
+				Name:    "(*Type1).Method2",
+				Kind:    graph.KindMethod,
+				Package: "example.com/pkg1",
+			},
+		},
+		Edges: map[string][]string{},
+	}
+
+	// Test with full grouping enabled
+	result := convertToD3Format(graph, true, true)
+
+	// Should have WebCola groups
+	if result.Groups == nil {
+		t.Fatal("Groups array is nil")
+	}
+
+	// Should have at least 2 groups (1 package + 1 type)
+	if len(result.Groups) < 2 {
+		t.Errorf("Expected at least 2 groups, got %d", len(result.Groups))
+	}
+
+	// Find package and type groups
+	var packageGroup, typeGroup *D3JSGroup
+	for i := range result.Groups {
+		if result.Groups[i].Level == "package" {
+			packageGroup = &result.Groups[i]
+		}
+		if result.Groups[i].Level == "type" {
+			typeGroup = &result.Groups[i]
+		}
+	}
+
+	if packageGroup == nil {
+		t.Error("Package group not found")
+	}
+	if typeGroup == nil {
+		t.Error("Type group not found")
+	}
+
+	// Type group should contain 2 methods
+	if typeGroup != nil && len(typeGroup.Leaves) != 2 {
+		t.Errorf("Type group should have 2 method leaves, got %d", len(typeGroup.Leaves))
+	}
+
+	// Package group should have nested type groups
+	if packageGroup != nil && len(packageGroup.Groups) < 1 {
+		t.Errorf("Package group should have nested type groups, got %d", len(packageGroup.Groups))
+	}
+}
+
+func Test_ExtractReceiverType(t *testing.T) {
+	tests := []struct {
+		methodName string
+		expected   string
+	}{
+		{"(*Type).Method", "Type"},
+		{"(Type).Method", "Type"},
+		{"(*MyStruct).DoSomething", "MyStruct"},
+		{"(MyStruct).DoSomething", "MyStruct"},
+		{"func1", ""}, // Not a method
+		{"", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.methodName, func(t *testing.T) {
+			result := extractReceiverType(tt.methodName)
+			if result != tt.expected {
+				t.Errorf("extractReceiverType(%q) = %q, want %q", tt.methodName, result, tt.expected)
+			}
+		})
+	}
+}
+
+func Test_ConvertToD3Format_GroupingOptions(t *testing.T) {
+	graph := &graph.DependencyGraph{
+		Nodes: map[string]*graph.Node{
+			"pkg1::func1": {
+				ID:      "pkg1::func1",
+				Name:    "func1",
+				Kind:    graph.KindFunction,
+				Package: "example.com/pkg1",
+			},
+		},
+		Edges: map[string][]string{},
+	}
+
+	t.Run("no grouping", func(t *testing.T) {
+		result := convertToD3Format(graph, false, false)
+		if len(result.Groups) != 0 {
+			t.Errorf("Expected 0 groups, got %d", len(result.Groups))
+		}
+	})
+
+	t.Run("WebCola package grouping only", func(t *testing.T) {
+		result := convertToD3Format(graph, true, false)
+		if len(result.Groups) != 1 {
+			t.Errorf("Expected 1 WebCola group, got %d", len(result.Groups))
+		}
+		if result.Groups[0].Level != "package" {
+			t.Errorf("Expected package level group, got %s", result.Groups[0].Level)
+		}
+	})
 }
