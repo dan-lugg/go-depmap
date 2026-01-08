@@ -9,7 +9,7 @@ import (
 	"go-depmap/pkg/graph"
 )
 
-//go:embed tpl/visualization.html
+//go:embed templates/d3js.html
 var templateFS embed.FS
 
 // D3JSNode represents a node in D3.js force-directed graph format
@@ -265,7 +265,7 @@ func trimReceiverParens(receiver string) string {
 // writeHTMLPage generates a self-contained HTML page with embedded D3.js/WebCola visualization
 func writeHTMLPage(writer io.Writer, d3Graph *D3JSGraph) error {
 	// Parse the embedded template
-	tmpl, err := template.ParseFS(templateFS, "tpl/visualization.html")
+	tmpl, err := template.ParseFS(templateFS, "templates/d3js.html")
 	if err != nil {
 		return err
 	}
