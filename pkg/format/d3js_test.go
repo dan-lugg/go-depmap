@@ -347,16 +347,19 @@ func Test_ConvertToD3Format_PackageGrouping(t *testing.T) {
 	pkg1, ok := packageMap["example.com/pkg1"]
 	if !ok {
 		t.Error("Package example.com/pkg1 not found")
-	} else if len(pkg1.Nodes) != 2 {
+	}
+	if ok && len(pkg1.Nodes) != 2 {
 		t.Errorf("Package pkg1 should have 2 nodes, got %d", len(pkg1.Nodes))
-	} else if pkg1.Label != "example.com/pkg1" {
+	}
+	if ok && pkg1.Label != "example.com/pkg1" {
 		t.Errorf("Package label mismatch: got %s, want example.com/pkg1", pkg1.Label)
 	}
 
 	pkg2, ok := packageMap["example.com/pkg2"]
 	if !ok {
 		t.Error("Package example.com/pkg2 not found")
-	} else if len(pkg2.Nodes) != 1 {
+	}
+	if ok && len(pkg2.Nodes) != 1 {
 		t.Errorf("Package pkg2 should have 1 node, got %d", len(pkg2.Nodes))
 	}
 
