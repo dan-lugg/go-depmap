@@ -81,7 +81,7 @@ jobs:
         go build -v -o bin/go-depmap ./cmd/depmap
 
     - name: Upload artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: go-depmap-linux-amd64
         path: bin/go-depmap
