@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Go Dependency Graph - WebCola Visualization</title>
+    <title>Go Dependency Graph - WebCola Canvas Visualization</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://unpkg.com/webcola@3.4.0/WebCola/cola.min.js"></script>
     <style>
@@ -20,6 +20,15 @@
             width: 100vw;
             height: 100vh;
             position: relative;
+        }
+
+        #graphCanvas {
+            display: block;
+            cursor: grab;
+        }
+
+        #graphCanvas:active {
+            cursor: grabbing;
         }
 
         #controls {
@@ -111,66 +120,6 @@
             border: 2px solid #fff;
         }
 
-        .link {
-            stroke: #999;
-            stroke-opacity: 0.6;
-            stroke-width: 1.5px;
-            fill: none;
-            marker-end: url(#arrowhead);
-        }
-
-        .node {
-            cursor: pointer;
-            stroke: #fff;
-            stroke-width: 1.5px;
-        }
-
-        .node:hover {
-            stroke: #ffa500;
-            stroke-width: 3px;
-        }
-
-        .label {
-            font-size: 9px;
-            fill: #ccc;
-            pointer-events: none;
-            text-anchor: middle;
-            user-select: none;
-        }
-
-        .group-rect {
-            fill: none;
-            stroke-width: 2px;
-            rx: 8;
-            ry: 8;
-            pointer-events: none;
-        }
-
-        .group-rect.package {
-            stroke: #0078d4;
-            fill: rgba(0, 120, 212, 0.1);
-        }
-
-        .group-rect.type {
-            stroke: #00d488;
-            fill: rgba(0, 212, 136, 0.1);
-        }
-
-        .group-label {
-            font-size: 11px;
-            font-weight: bold;
-            pointer-events: none;
-            text-shadow: 0 0 3px #000, 0 0 3px #000;
-        }
-
-        .group-label.package {
-            fill: #0078d4;
-        }
-
-        .group-label.type {
-            fill: #00d488;
-        }
-
         .tooltip {
             position: absolute;
             background-color: rgba(0, 0, 0, 0.95);
@@ -194,6 +143,8 @@
 </head>
 <body>
     <div id="container">
+        <canvas id="graphCanvas"></canvas>
+
         <div id="controls">
             <h3>⚙️ Controls</h3>
             <label>
@@ -222,11 +173,10 @@
         </div>
 
         <div id="info">
-            <strong>Go Dependency Graph</strong><br>
+            <strong>Go Dependency Graph (Canvas)</strong><br>
             Nodes: <span id="nodeCount">0</span> | Links: <span id="linkCount">0</span> | Groups: <span id="groupCount">0</span><br>
-            <small>💡 Drag nodes • Zoom with wheel • Click for details</small>
+            <small>💡 Drag canvas • Zoom with wheel • Click for details</small>
         </div>
-        <svg id="graph"></svg>
     </div>
     <div class="tooltip" id="tooltip"></div>
 
@@ -235,214 +185,397 @@
         const data = {{.Data}};
 
         console.log("Loaded data:", data);
+        console.log("Nodes:", data.nodes.length, "Links:", data.links.length, "Groups:", (data.groups || []).length);
 
-        // Set up SVG
+        // Canvas setup
+        const canvas = document.getElementById('graphCanvas');
+        const ctx = canvas.getContext('2d');
         const width = window.innerWidth;
         const height = window.innerHeight;
 
-        const svg = d3.select("#graph")
-            .attr("width", width)
-            .attr("height", height);
+        canvas.width = width;
+        canvas.height = height;
 
-        // Create container group first (needed for zoom)
-        const container = svg.append("g");
+        // Color mapping for node types
+        const colorMap = {
+            1: '#FF9800', // Functions - orange
+            2: '#2196F3', // Methods - blue
+            3: '#4CAF50'  // Types - green
+        };
 
-        // Add zoom behavior
-        svg.call(d3.zoom().on("zoom", (event) => {
-            container.attr("transform", event.transform);
-        }));
+        // UI state
+        let showLabels = true;
+        let showGroups = true;
+        let transform = d3.zoomIdentity;
+        let hoveredNode = null;
+        let selectedNode = null;
 
-        // Add arrow marker
-        svg.append("defs").append("marker")
-            .attr("id", "arrowhead")
-            .attr("viewBox", "-0 -5 10 10")
-            .attr("refX", 20)
-            .attr("refY", 0)
-            .attr("orient", "auto")
-            .attr("markerWidth", 6)
-            .attr("markerHeight", 6)
-            .append("path")
-            .attr("d", "M 0,-5 L 10,0 L 0,5")
-            .attr("fill", "#999");
-
-
-        // Create layers
-        const groupLayer = container.append("g").attr("class", "groups");
-        const linkLayer = container.append("g").attr("class", "links");
-        const nodeLayer = container.append("g").attr("class", "nodes");
-        const labelLayer = container.append("g").attr("class", "labels");
-
-        // Color scale
-        const colorScale = d3.scaleOrdinal()
-            .domain([1, 2, 3])
-            .range(["#FF9800", "#2196F3", "#4CAF50"]);
-
-        // Update info
+        // Update info display
         document.getElementById("nodeCount").textContent = data.nodes.length;
         document.getElementById("linkCount").textContent = data.links.length;
         document.getElementById("groupCount").textContent = (data.groups || []).length;
 
         // Tooltip
-        const tooltip = d3.select("#tooltip");
+        const tooltip = document.getElementById("tooltip");
 
-        // Create node lookup
+        // Create node lookup and prepare data
         const nodeById = new Map(data.nodes.map((n, i) => [n.id, i]));
 
-        // Prepare WebCola layout
+        // Prepare links with indices
+        const links = data.links.map(l => ({
+            source: nodeById.get(l.source),
+            target: nodeById.get(l.target),
+            value: l.value || 1
+        }));
+
+        // Initialize WebCola layout
         const colaLayout = new cola.Layout()
             .size([width, height])
             .nodes(data.nodes)
-            .links(data.links.map(l => ({
-                source: nodeById.get(l.source),
-                target: nodeById.get(l.target)
-            })))
-            .avoidOverlaps(true)
+            .links(links)
+            .avoidOverlaps(data.nodes.length < 1000) // Disable for large graphs
             .handleDisconnected(true)
             .convergenceThreshold(1e-3)
-            .linkDistance(100)
-            .symmetricDiffLinkLengths(5);
+            .linkDistance(300)
+            .symmetricDiffLinkLengths(15);
 
         // Add groups if present
         if (data.groups && data.groups.length > 0) {
             colaLayout.groups(data.groups);
         }
 
-        // Create links
-        const link = linkLayer.selectAll("path")
-            .data(data.links)
-            .enter().append("path")
-            .attr("class", "link");
+        // Run layout computation
+        let layoutRunning = true;
+        let tickCount = 0;
+        const maxTicks = data.nodes.length < 500 ? 200 : 100; // Fewer ticks for large graphs
 
-        // Create nodes
-        const node = nodeLayer.selectAll("circle")
-            .data(data.nodes)
-            .enter().append("circle")
-            .attr("class", "node")
-            .attr("r", 8)
-            .attr("fill", d => colorScale(d.group))
-            .on("click", (event, d) => {
-                alert("Name: " + d.name + "\\nKind: " + d.kind + "\\nPackage: " + d.package + "\\nFile: " + d.file + ":" + d.line);
-            })
-            .on("mouseover", (event, d) => {
-                tooltip.style("display", "block")
-                    .html("<strong>" + d.name + "</strong><br>" +
-                           "Kind: " + d.kind + "<br>" +
-                           "Package: " + d.package + "<br>" +
-                           "File: " + d.file + ":" + d.line)
-                    .style("left", (event.pageX + 10) + "px")
-                    .style("top", (event.pageY + 10) + "px");
-            })
-            .on("mousemove", (event) => {
-                tooltip.style("left", (event.pageX + 10) + "px")
-                    .style("top", (event.pageY + 10) + "px");
-            })
-            .on("mouseout", () => {
-                tooltip.style("display", "none");
-            });
+        colaLayout.start(50, 100, 200);
 
-        // Create labels
-        const label = labelLayer.selectAll("text")
-            .data(data.nodes)
-            .enter().append("text")
-            .attr("class", "label")
-            .text(d => d.name);
+        // Build spatial index (quadtree) for efficient node lookup
+        let quadtree = null;
 
-        // Group rectangles
-        let groupRects, groupLabels;
-
-        function updateGroups() {
-            if (!document.getElementById("showGroups").checked) {
-                groupLayer.selectAll("*").remove();
-                return;
-            }
-
-            if (!data.groups || data.groups.length === 0) return;
-
-            groupLayer.selectAll("*").remove();
-
-            groupRects = groupLayer.selectAll("rect")
-                .data(data.groups)
-                .enter().append("rect")
-                .attr("class", d => "group-rect " + d.level)
-                .attr("rx", 8)
-                .attr("ry", 8);
-
-            groupLabels = groupLayer.selectAll("text")
-                .data(data.groups)
-                .enter().append("text")
-                .attr("class", d => "group-label " + d.level)
-                .text(d => d.label.split('/').pop());
+        function buildQuadtree() {
+            quadtree = d3.quadtree()
+                .x(d => d.x)
+                .y(d => d.y)
+                .addAll(data.nodes);
         }
 
-        // Update positions on tick
+        // Calculate zoom level for LOD rendering
+        function getZoomLevel() {
+            const k = transform.k;
+            if (k < 0.5) return 0;      // Far out - groups only
+            if (k < 1.5) return 1;      // Medium - nodes only
+            return 2;                    // Close up - full detail
+        }
+
+        // Check if point is in viewport (culling)
+        function inViewport(x, y, margin = 50) {
+            const tx = transform.applyX(x);
+            const ty = transform.applyY(y);
+            return tx > -margin && tx < width + margin &&
+                   ty > -margin && ty < height + margin;
+        }
+
+        // Render function
+        function render() {
+            ctx.save();
+            ctx.clearRect(0, 0, width, height);
+
+            // Apply transform
+            ctx.translate(transform.x, transform.y);
+            ctx.scale(transform.k, transform.k);
+
+            const zoomLevel = getZoomLevel();
+
+            // Draw groups (if enabled and zoom level allows)
+            if (showGroups && data.groups && data.groups.length > 0) {
+                data.groups.forEach(g => {
+                    if (!g.bounds) return;
+
+                    // Check if group is in viewport
+                    const gx = g.bounds.x;
+                    const gy = g.bounds.y;
+                    const gw = g.bounds.width();
+                    const gh = g.bounds.height();
+
+                    if (!inViewport(gx + gw/2, gy + gh/2, Math.max(gw, gh))) return;
+
+                    ctx.save();
+
+                    // Draw group background
+                    ctx.beginPath();
+                    ctx.roundRect(gx, gy, gw, gh, 8);
+
+                    if (g.level === 'package') {
+                        ctx.fillStyle = 'rgba(0, 120, 212, 0.1)';
+                        ctx.strokeStyle = '#0078d4';
+                    } else {
+                        ctx.fillStyle = 'rgba(0, 212, 136, 0.1)';
+                        ctx.strokeStyle = '#00d488';
+                    }
+
+                    ctx.lineWidth = 2 / transform.k;
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Draw group label (if zoomed in enough)
+                    if (zoomLevel >= 1) {
+                        ctx.fillStyle = g.level === 'package' ? '#0078d4' : '#00d488';
+                        ctx.font = `bold ${13 / transform.k}px 'Segoe UI', sans-serif`;
+                        ctx.textAlign = 'left';
+                        ctx.textBaseline = 'top';
+
+                        // Add text shadow for readability
+                        ctx.shadowColor = '#000';
+                        ctx.shadowBlur = 3 / transform.k;
+                        ctx.shadowOffsetX = 0;
+                        ctx.shadowOffsetY = 0;
+
+                        const label = g.level === 'package' ? g.label : g.label.split('/').pop();
+                        ctx.fillText(label, gx + 10, gy + 10);
+
+                        ctx.shadowColor = 'transparent';
+                    }
+
+                    ctx.restore();
+                });
+            }
+
+            // Draw links (only at zoom level 2)
+            if (zoomLevel >= 2) {
+                ctx.beginPath();
+                ctx.strokeStyle = 'rgba(153, 153, 153, 0.6)';
+                ctx.lineWidth = 1.5 / transform.k;
+
+                links.forEach(l => {
+                    const source = data.nodes[l.source];
+                    const target = data.nodes[l.target];
+
+                    if (!source || !target) return;
+                    if (!inViewport(source.x, source.y) && !inViewport(target.x, target.y)) return;
+
+                    ctx.moveTo(source.x, source.y);
+                    ctx.lineTo(target.x, target.y);
+                });
+
+                ctx.stroke();
+
+                // Draw arrowheads
+                ctx.fillStyle = '#999';
+                links.forEach(l => {
+                    const source = data.nodes[l.source];
+                    const target = data.nodes[l.target];
+
+                    if (!source || !target) return;
+                    if (!inViewport(target.x, target.y)) return;
+
+                    const dx = target.x - source.x;
+                    const dy = target.y - source.y;
+                    const len = Math.sqrt(dx * dx + dy * dy);
+                    if (len === 0) return;
+
+                    const ratio = (len - 10) / len;
+                    const arrowX = source.x + dx * ratio;
+                    const arrowY = source.y + dy * ratio;
+                    const angle = Math.atan2(dy, dx);
+
+                    ctx.save();
+                    ctx.translate(arrowX, arrowY);
+                    ctx.rotate(angle);
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(-6 / transform.k, -3 / transform.k);
+                    ctx.lineTo(-6 / transform.k, 3 / transform.k);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.restore();
+                });
+            }
+
+            // Draw nodes
+            if (zoomLevel >= 1) {
+                data.nodes.forEach(node => {
+                    if (!inViewport(node.x, node.y)) return;
+
+                    ctx.beginPath();
+                    const radius = zoomLevel >= 2 ? 10 / transform.k : 5 / transform.k;
+                    ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI);
+
+                    ctx.fillStyle = colorMap[node.group] || '#999';
+                    ctx.fill();
+
+                    // Highlight hovered node
+                    if (hoveredNode === node) {
+                        ctx.strokeStyle = '#ffa500';
+                        ctx.lineWidth = 3 / transform.k;
+                    } else {
+                        ctx.strokeStyle = '#fff';
+                        ctx.lineWidth = 1.5 / transform.k;
+                    }
+                    ctx.stroke();
+                });
+            }
+
+            // Draw labels (only at full zoom)
+            if (showLabels && zoomLevel >= 2) {
+                ctx.fillStyle = '#ccc';
+                ctx.font = `${11 / transform.k}px 'Segoe UI', sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+
+                data.nodes.forEach(node => {
+                    if (!inViewport(node.x, node.y)) return;
+                    ctx.fillText(node.name, node.x, node.y + 15 / transform.k);
+                });
+            }
+
+            ctx.restore();
+        }
+
+        // Layout tick handler
         colaLayout.on("tick", () => {
-            link.attr("d", d => {
-                const sourceNode = data.nodes[nodeById.get(d.source)];
-                const targetNode = data.nodes[nodeById.get(d.target)];
-                return "M" + sourceNode.x + "," + sourceNode.y + "L" + targetNode.x + "," + targetNode.y;
-            });
+            tickCount++;
 
-            node
-                .attr("cx", d => d.x)
-                .attr("cy", d => d.y);
+            // Update less frequently for large graphs
+            if (data.nodes.length > 1000 && tickCount % 5 !== 0) return;
 
-            label
-                .attr("x", d => d.x)
-                .attr("y", d => d.y + 20);
+            render();
 
-            // Update group rectangles
-            if (groupRects && data.groups) {
-                groupRects.each(function(d) {
-                    if (d.bounds) {
-                        d3.select(this)
-                            .attr("x", d.bounds.x)
-                            .attr("y", d.bounds.y)
-                            .attr("width", d.bounds.width())
-                            .attr("height", d.bounds.height());
-                    }
-                });
-
-                groupLabels.each(function(d) {
-                    if (d.bounds) {
-                        d3.select(this)
-                            .attr("x", d.bounds.x + 10)
-                            .attr("y", d.bounds.y + 20);
-                    }
-                });
+            // Stop after max ticks and rebuild quadtree
+            if (tickCount >= maxTicks) {
+                layoutRunning = false;
+                buildQuadtree();
+                colaLayout.stop();
             }
         });
 
-        // Start layout
-        updateGroups();
-        colaLayout.start(50, 100, 200);
+        // Initial quadtree build
+        buildQuadtree();
 
-        // Add drag behavior to nodes after layout starts
-        node.call(d3.drag()
-            .on("start", function(event, d) {
-                d.fixed = 1;
-            })
-            .on("drag", function(event, d) {
-                d.x = event.x;
-                d.y = event.y;
-                colaLayout.resume();
-            })
-            .on("end", function(event, d) {
-                d.fixed = 0;
-            })
-        );
+        // Zoom behavior
+        const zoom = d3.zoom()
+            .scaleExtent([0.1, 10])
+            .on("zoom", (event) => {
+                transform = event.transform;
+                render();
+            });
+
+        d3.select(canvas).call(zoom);
+
+        // Mouse interaction
+        function getCanvasCoordinates(event) {
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            // Transform to graph coordinates
+            return transform.invert([x, y]);
+        }
+
+        function findNodeAt(x, y, radius = 15) {
+            if (!quadtree) return null;
+
+            let closest = null;
+            let closestDist = radius;
+
+            quadtree.visit((node, x1, y1, x2, y2) => {
+                if (!node.length) {
+                    do {
+                        const d = node.data;
+                        const dx = d.x - x;
+                        const dy = d.y - y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+
+                        if (dist < closestDist) {
+                            closestDist = dist;
+                            closest = d;
+                        }
+
+                        node = node.next;
+                    } while (node);
+                }
+
+                return x1 > x + radius || x2 < x - radius ||
+                       y1 > y + radius || y2 < y - radius;
+            });
+
+            return closest;
+        }
+
+        // Mouse move handler
+        canvas.addEventListener('mousemove', (event) => {
+            const [x, y] = getCanvasCoordinates(event);
+            const node = findNodeAt(x, y);
+
+            if (node !== hoveredNode) {
+                hoveredNode = node;
+                render();
+
+                if (node) {
+                    tooltip.style.display = 'block';
+                    tooltip.innerHTML = `<strong>${node.name}</strong><br>` +
+                        `Kind: ${node.kind}<br>` +
+                        `Package: ${node.package}<br>` +
+                        `File: ${node.file}:${node.line}`;
+                    tooltip.style.left = (event.pageX + 10) + 'px';
+                    tooltip.style.top = (event.pageY + 10) + 'px';
+                } else {
+                    tooltip.style.display = 'none';
+                }
+            } else if (node) {
+                tooltip.style.left = (event.pageX + 10) + 'px';
+                tooltip.style.top = (event.pageY + 10) + 'px';
+            }
+        });
+
+        // Mouse leave handler
+        canvas.addEventListener('mouseleave', () => {
+            hoveredNode = null;
+            tooltip.style.display = 'none';
+            render();
+        });
+
+        // Click handler
+        canvas.addEventListener('click', (event) => {
+            const [x, y] = getCanvasCoordinates(event);
+            const node = findNodeAt(x, y);
+
+            if (node) {
+                alert(`Name: ${node.name}\nKind: ${node.kind}\nPackage: ${node.package}\nFile: ${node.file}:${node.line}`);
+            }
+        });
 
         // Controls
         document.getElementById("showLabels").addEventListener("change", (e) => {
-            label.style("display", e.target.checked ? "block" : "none");
+            showLabels = e.target.checked;
+            render();
         });
 
-        document.getElementById("showGroups").addEventListener("change", () => {
-            updateGroups();
+        document.getElementById("showGroups").addEventListener("change", (e) => {
+            showGroups = e.target.checked;
+            render();
         });
 
         document.getElementById("resetBtn").addEventListener("click", () => {
+            // Reset zoom
+            d3.select(canvas).call(zoom.transform, d3.zoomIdentity);
+
+            // Restart layout
+            layoutRunning = true;
+            tickCount = 0;
             colaLayout.start(50, 100, 200);
         });
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            render();
+        });
+
+        // Initial render
+        render();
     </script>
 </body>
 </html>

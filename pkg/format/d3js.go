@@ -186,7 +186,7 @@ func convertToD3Format(depGraph *graph.DependencyGraph, groupByPackage bool, gro
 							Label:   typeName,
 							Leaves:  typeLeaves,
 							Level:   "type",
-							Padding: 15,
+							Padding: 50, // Increased from 30 to 50 for even better spacing
 						})
 
 						nestedTypeGroupIndices = append(nestedTypeGroupIndices, typeGroupIndex)
@@ -208,7 +208,7 @@ func convertToD3Format(depGraph *graph.DependencyGraph, groupByPackage bool, gro
 				Leaves:  packageLeaves,
 				Groups:  nestedTypeGroupIndices,
 				Level:   "package",
-				Padding: 25,
+				Padding: 80, // Increased from 50 to 80 for even better spacing
 			}
 			d3Graph.Groups = append(d3Graph.Groups, packageGroup)
 		}
