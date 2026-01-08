@@ -8,7 +8,7 @@ import (
 	"go-depmap/pkg/graph"
 )
 
-func Test_D3JSJSONWriter_Write(t *testing.T) {
+func Test_D3JSWriter_Write(t *testing.T) {
 	tests := []struct {
 		name    string
 		graph   *graph.DependencyGraph
@@ -80,10 +80,11 @@ func Test_D3JSJSONWriter_Write(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w := &D3JSJSONWriter{}
+			w := &D3JSWriter{}
 			var buf bytes.Buffer
+			config := Config{"groupPackages": true, "pretty": true}
 
-			err := w.Write(&buf, tt.graph)
+			err := w.Write(&buf, tt.graph, config)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Write() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -199,7 +200,7 @@ func Test_ConvertToD3Format(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := convertToD3Format(tt.graph)
+			result := convertToD3Format(tt.graph, true)
 
 			if len(result.Nodes) != tt.expectedNodes {
 				t.Errorf("Node count = %d, want %d", len(result.Nodes), tt.expectedNodes)
@@ -235,7 +236,7 @@ func Test_D3JSNode_GroupAssignment(t *testing.T) {
 				Edges: make(map[string][]string),
 			}
 
-			result := convertToD3Format(g)
+			result := convertToD3Format(g, true)
 
 			if len(result.Nodes) != 1 {
 				t.Fatalf("Expected 1 node, got %d", len(result.Nodes))
@@ -326,7 +327,7 @@ func Test_ConvertToD3Format_PackageGrouping(t *testing.T) {
 		},
 	}
 
-	result := convertToD3Format(graph)
+	result := convertToD3Format(graph, true)
 
 	// Verify packages array exists
 	if result.Packages == nil {

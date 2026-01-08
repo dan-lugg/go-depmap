@@ -41,18 +41,26 @@ type D3JSGraph struct {
 	Packages []D3JSPackageGroup `json:"packages"` // Package groups for convex hull rendering
 }
 
-// D3JSJSONWriter writes the graph in D3.js force-directed graph format
-type D3JSJSONWriter struct{}
+// D3JSWriter writes the graph in D3.js force-directed graph format
+type D3JSWriter struct{}
 
-func (w *D3JSJSONWriter) Write(writer io.Writer, graph *graph.DependencyGraph) error {
-	d3Graph := convertToD3Format(graph)
+func (w *D3JSWriter) Write(writer io.Writer, graph *graph.DependencyGraph, config Config) error {
+	// Check if package grouping is enabled (defaults to true for backward compatibility)
+	groupPackages := config.GetBool("groupPackages", true)
+
+	d3Graph := convertToD3Format(graph, groupPackages)
 	enc := json.NewEncoder(writer)
-	enc.SetIndent("", "  ")
+
+	// Check if pretty printing is enabled (defaults to true)
+	if config.GetBool("pretty", true) {
+		enc.SetIndent("", "  ")
+	}
+
 	return enc.Encode(d3Graph)
 }
 
-// convertToD3Format converts a DependencyGraph to D3.js format with package grouping
-func convertToD3Format(graph *graph.DependencyGraph) *D3JSGraph {
+// convertToD3Format converts a DependencyGraph to D3.js format with optional package grouping
+func convertToD3Format(graph *graph.DependencyGraph, groupPackages bool) *D3JSGraph {
 	d3Graph := &D3JSGraph{
 		Nodes:    make([]D3JSNode, 0, len(graph.Nodes)),
 		Links:    make([]D3JSLink, 0),
@@ -100,13 +108,15 @@ func convertToD3Format(graph *graph.DependencyGraph) *D3JSGraph {
 		}
 	}
 
-	// Build package groups for convex hull rendering
-	for pkgName, nodeIDs := range packageNodes {
-		d3Graph.Packages = append(d3Graph.Packages, D3JSPackageGroup{
-			ID:    pkgName,
-			Label: pkgName,
-			Nodes: nodeIDs,
-		})
+	// Build package groups for convex hull rendering (only if enabled)
+	if groupPackages {
+		for pkgName, nodeIDs := range packageNodes {
+			d3Graph.Packages = append(d3Graph.Packages, D3JSPackageGroup{
+				ID:    pkgName,
+				Label: pkgName,
+				Nodes: nodeIDs,
+			})
+		}
 	}
 
 	return d3Graph

@@ -14,29 +14,24 @@ func Test_GetFormatWriter(t *testing.T) {
 		expectedType string
 	}{
 		{
-			name:         "pretty-json format",
-			format:       "pretty-json",
-			expectedType: "*format.PrettyJSONWriter",
+			name:         "json format",
+			format:       "json",
+			expectedType: "*format.JSONWriter",
 		},
 		{
-			name:         "minify-json format",
-			format:       "minify-json",
-			expectedType: "*format.MinifyJSONWriter",
+			name:         "d3js format",
+			format:       "d3js",
+			expectedType: "*format.D3JSWriter",
 		},
 		{
-			name:         "d3js-json format",
-			format:       "d3js-json",
-			expectedType: "*format.D3JSJSONWriter",
-		},
-		{
-			name:         "unknown format defaults to pretty-json",
+			name:         "unknown format defaults to json",
 			format:       "unknown",
-			expectedType: "*format.PrettyJSONWriter",
+			expectedType: "*format.JSONWriter",
 		},
 		{
-			name:         "empty format defaults to pretty-json",
+			name:         "empty format defaults to json",
 			format:       "",
-			expectedType: "*format.PrettyJSONWriter",
+			expectedType: "*format.JSONWriter",
 		},
 	}
 
@@ -49,12 +44,10 @@ func Test_GetFormatWriter(t *testing.T) {
 
 			writerType := ""
 			switch writer.(type) {
-			case *PrettyJSONWriter:
-				writerType = "*format.PrettyJSONWriter"
-			case *MinifyJSONWriter:
-				writerType = "*format.MinifyJSONWriter"
-			case *D3JSJSONWriter:
-				writerType = "*format.D3JSJSONWriter"
+			case *JSONWriter:
+				writerType = "*format.JSONWriter"
+			case *D3JSWriter:
+				writerType = "*format.D3JSWriter"
 			}
 
 			if writerType != tt.expectedType {
@@ -65,7 +58,7 @@ func Test_GetFormatWriter(t *testing.T) {
 }
 
 func Test_GetFormatWriter_ImplementsInterface(t *testing.T) {
-	formats := []string{"pretty-json", "minify-json", "d3js-json"}
+	formats := []string{"json", "d3js"}
 
 	for _, format := range formats {
 		t.Run(format, func(t *testing.T) {
@@ -75,7 +68,8 @@ func Test_GetFormatWriter_ImplementsInterface(t *testing.T) {
 
 			g := graph.NewDependencyGraph()
 			var buf bytes.Buffer
-			err := writer.Write(&buf, g)
+			config := Config{"pretty": true}
+			err := writer.Write(&buf, g, config)
 			if err != nil {
 				t.Errorf("Write() error = %v", err)
 			}

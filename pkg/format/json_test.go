@@ -9,7 +9,7 @@ import (
 	"go-depmap/pkg/graph"
 )
 
-func Test_PrettyJSONWriter_Write(t *testing.T) {
+func Test_JSONWriter_Write_Pretty(t *testing.T) {
 	tests := []struct {
 		name    string
 		graph   *graph.DependencyGraph
@@ -71,10 +71,11 @@ func Test_PrettyJSONWriter_Write(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w := &PrettyJSONWriter{}
+			w := &JSONWriter{}
 			var buf bytes.Buffer
+			config := Config{"pretty": true}
 
-			err := w.Write(&buf, tt.graph)
+			err := w.Write(&buf, tt.graph, config)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Write() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -102,7 +103,7 @@ func Test_PrettyJSONWriter_Write(t *testing.T) {
 	}
 }
 
-func Test_MinifyJSONWriter_Write(t *testing.T) {
+func Test_JSONWriter_Write_Minified(t *testing.T) {
 	tests := []struct {
 		name    string
 		graph   *graph.DependencyGraph
@@ -135,10 +136,11 @@ func Test_MinifyJSONWriter_Write(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			w := &MinifyJSONWriter{}
+			w := &JSONWriter{}
 			var buf bytes.Buffer
+			config := Config{"pretty": false}
 
-			err := w.Write(&buf, tt.graph)
+			err := w.Write(&buf, tt.graph, config)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Write() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -154,7 +156,7 @@ func Test_MinifyJSONWriter_Write(t *testing.T) {
 	}
 }
 
-func Test_JSONWriters_Comparison(t *testing.T) {
+func Test_JSONWriter_Comparison(t *testing.T) {
 	testGraph := &graph.DependencyGraph{
 		Nodes: map[string]*graph.Node{
 			"test::func1": {
@@ -172,17 +174,18 @@ func Test_JSONWriters_Comparison(t *testing.T) {
 		},
 	}
 
-	prettyWriter := &PrettyJSONWriter{}
-	minifyWriter := &MinifyJSONWriter{}
+	writer := &JSONWriter{}
+	prettyConfig := Config{"pretty": true}
+	minifyConfig := Config{"pretty": false}
 
 	var prettyBuf, minifyBuf bytes.Buffer
 
-	if err := prettyWriter.Write(&prettyBuf, testGraph); err != nil {
-		t.Fatalf("PrettyJSONWriter.Write() error = %v", err)
+	if err := writer.Write(&prettyBuf, testGraph, prettyConfig); err != nil {
+		t.Fatalf("JSONWriter.Write() with pretty=true error = %v", err)
 	}
 
-	if err := minifyWriter.Write(&minifyBuf, testGraph); err != nil {
-		t.Fatalf("MinifyJSONWriter.Write() error = %v", err)
+	if err := writer.Write(&minifyBuf, testGraph, minifyConfig); err != nil {
+		t.Fatalf("JSONWriter.Write() with pretty=false error = %v", err)
 	}
 
 	var prettyResult, minifyResult map[string]interface{}
@@ -198,5 +201,10 @@ func Test_JSONWriters_Comparison(t *testing.T) {
 	if len(prettyResult) != len(minifyResult) {
 		t.Errorf("Different number of top-level keys: pretty=%d, minify=%d",
 			len(prettyResult), len(minifyResult))
+	}
+
+	// Verify pretty output has indentation
+	if !strings.Contains(prettyBuf.String(), "  ") {
+		t.Error("Pretty output should contain indentation")
 	}
 }

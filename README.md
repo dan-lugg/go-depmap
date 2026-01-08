@@ -50,10 +50,13 @@ Analyze the current directory and output pretty JSON to STDOUT:
 ### Options
 
 - `-source <path>`: Specify the directory of the Go project to analyze (default: ".")
-- `-format <format>`: Specify the output format (default: "pretty-json")
-    - `pretty-json`: Pretty-printed JSON output
-    - `minify-json`: Compact JSON output
-    - `d3js-json`: D3.js force-directed graph format
+- `-format <format>`: Specify the output format (default: "json")
+    - `json`: JSON output with configurable formatting
+    - `d3js`: D3.js force-directed graph format
+- `-config <json>`: JSON configuration object for the formatter (default: "{}")
+    - Available config options:
+        - `pretty` (bool): Enable pretty-printed output (default: true)
+        - `groupPackages` (bool): Group nodes by package in D3.js format (default: true)
 
 ### Examples
 
@@ -66,7 +69,19 @@ Analyze a specific project:
 Generate minified JSON output:
 
 ```bash
-./go-depmap -format=minify-json
+./go-depmap -format=json -config='{"pretty":false}'
+```
+
+Generate D3.js output without package grouping:
+
+```bash
+./go-depmap -format=d3js -config='{"groupPackages":false}'
+```
+
+Generate minified D3.js output:
+
+```bash
+./go-depmap -format=d3js -config='{"pretty":false,"groupPackages":true}'
 ```
 
 Generate D3.js-compatible output and save to file:
@@ -113,7 +128,7 @@ The default format with two main sections:
 }
 ```
 
-### D3.js Format (d3js-json)
+### D3.js Format (d3js)
 
 Compatible with D3.js force-directed graph visualizations with **convex hull package grouping**:
 
@@ -168,7 +183,7 @@ The tool includes an interactive D3.js visualization (`index.html`) that display
 
 1. Generate the dependency graph:
    ```bash
-   ./go-depmap -source=./pkg -format=d3js-json > graph.json
+   ./go-depmap -source=./pkg -format=d3js > graph.json
    ```
 
 2. Start a local web server:

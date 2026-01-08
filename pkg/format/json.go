@@ -7,19 +7,16 @@ import (
 	"go-depmap/pkg/graph"
 )
 
-// PrettyJSONWriter writes the graph as pretty-printed JSON
-type PrettyJSONWriter struct{}
+// JSONWriter writes the graph as JSON (pretty-printed or minified based on config)
+type JSONWriter struct{}
 
-func (w *PrettyJSONWriter) Write(writer io.Writer, graph *graph.DependencyGraph) error {
+func (w *JSONWriter) Write(writer io.Writer, graph *graph.DependencyGraph, config Config) error {
 	enc := json.NewEncoder(writer)
-	enc.SetIndent("", "  ")
-	return enc.Encode(graph)
-}
 
-// MinifyJSONWriter writes the graph as minified JSON
-type MinifyJSONWriter struct{}
+	// Check if pretty printing is enabled (defaults to true)
+	if config.GetBool("pretty", true) {
+		enc.SetIndent("", "  ")
+	}
 
-func (w *MinifyJSONWriter) Write(writer io.Writer, graph *graph.DependencyGraph) error {
-	enc := json.NewEncoder(writer)
 	return enc.Encode(graph)
 }
