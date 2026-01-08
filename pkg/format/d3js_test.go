@@ -298,3 +298,81 @@ func Test_D3JSGraph_JSONStructure(t *testing.T) {
 		t.Errorf("Expected 1 link in array, got %v", result["links"])
 	}
 }
+
+func Test_ConvertToD3Format_PackageGrouping(t *testing.T) {
+	graph := &graph.DependencyGraph{
+		Nodes: map[string]*graph.Node{
+			"pkg1::func1": {
+				ID:      "pkg1::func1",
+				Name:    "func1",
+				Kind:    graph.KindFunction,
+				Package: "example.com/pkg1",
+			},
+			"pkg1::Type1": {
+				ID:      "pkg1::Type1",
+				Name:    "Type1",
+				Kind:    graph.KindType,
+				Package: "example.com/pkg1",
+			},
+			"pkg2::func2": {
+				ID:      "pkg2::func2",
+				Name:    "func2",
+				Kind:    graph.KindFunction,
+				Package: "example.com/pkg2",
+			},
+		},
+		Edges: map[string][]string{
+			"pkg1::func1": {"pkg1::Type1"},
+		},
+	}
+
+	result := convertToD3Format(graph)
+
+	// Verify packages array exists
+	if result.Packages == nil {
+		t.Fatal("Packages array is nil")
+	}
+
+	// Should have 2 packages
+	if len(result.Packages) != 2 {
+		t.Errorf("Expected 2 packages, got %d", len(result.Packages))
+	}
+
+	// Verify package grouping
+	packageMap := make(map[string]D3JSPackageGroup)
+	for _, pkg := range result.Packages {
+		packageMap[pkg.ID] = pkg
+	}
+
+	pkg1, ok := packageMap["example.com/pkg1"]
+	if !ok {
+		t.Error("Package example.com/pkg1 not found")
+	} else {
+		if len(pkg1.Nodes) != 2 {
+			t.Errorf("Package pkg1 should have 2 nodes, got %d", len(pkg1.Nodes))
+		}
+		if pkg1.Label != "example.com/pkg1" {
+			t.Errorf("Package label mismatch: got %s, want example.com/pkg1", pkg1.Label)
+		}
+	}
+
+	pkg2, ok := packageMap["example.com/pkg2"]
+	if !ok {
+		t.Error("Package example.com/pkg2 not found")
+	} else {
+		if len(pkg2.Nodes) != 1 {
+			t.Errorf("Package pkg2 should have 1 node, got %d", len(pkg2.Nodes))
+		}
+	}
+
+	// Verify all nodes have package_id set
+	for _, node := range result.Nodes {
+		if node.PackageID == "" {
+			t.Errorf("Node %s has empty package_id", node.ID)
+		}
+		if node.PackageID != node.Package {
+			t.Errorf("Node %s package_id (%s) doesn't match package (%s)",
+				node.ID, node.PackageID, node.Package)
+		}
+	}
+}

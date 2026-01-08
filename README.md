@@ -115,7 +115,7 @@ The default format with two main sections:
 
 ### D3.js Format (d3js-json)
 
-Compatible with D3.js force-directed graph visualizations:
+Compatible with D3.js force-directed graph visualizations with **convex hull package grouping**:
 
 ```json
 {
@@ -128,7 +128,8 @@ Compatible with D3.js force-directed graph visualizations:
       "file": "utils.go",
       "line": 10,
       "signature": "func() string",
-      "group": 1
+      "group": 1,
+      "package_id": "example.com/myapp/utils"
     }
   ],
   "links": [
@@ -137,11 +138,55 @@ Compatible with D3.js force-directed graph visualizations:
       "target": "example.com/myapp/utils::Helper",
       "value": 1
     }
+  ],
+  "packages": [
+    {
+      "id": "example.com/myapp/utils",
+      "label": "example.com/myapp/utils",
+      "nodes": [
+        "example.com/myapp/utils::Helper",
+        "example.com/myapp/utils::Config"
+      ]
+    }
   ]
 }
 ```
 
-Node groups: function=1, method=2, type=3 (useful for coloring in visualizations)
+**Features:**
+- **Node groups**: function=1, method=2, type=3 (useful for coloring in visualizations)
+- **Package grouping**: Nodes are grouped by their fully qualified package name
+- **Convex hull support**: The `packages` array enables visual grouping with convex hulls
+- **Interactive visualization**: Includes `index.html` for interactive D3.js visualization with package boundaries
+
+See [PACKAGE_GROUPING.md](PACKAGE_GROUPING.md) for detailed information about the package grouping feature.
+
+## Visualization
+
+The tool includes an interactive D3.js visualization (`index.html`) that displays your dependency graph with package grouping:
+
+### Quick Start
+
+1. Generate the dependency graph:
+   ```bash
+   ./go-depmap -source=./pkg -format=d3js-json > graph.json
+   ```
+
+2. Start a local web server:
+   ```bash
+   python3 -m http.server 8000
+   ```
+
+3. Open your browser to `http://localhost:8000/index.html`
+
+### Features
+
+- **Package Grouping**: Visual boundaries (convex hulls) around nodes from the same package
+- **Interactive Controls**: Adjust force simulation, node size, and toggle labels
+- **Color Coding**: Functions (orange), Methods (blue), Types (green)
+- **Drag & Zoom**: Rearrange nodes and explore large graphs
+- **Tooltips**: Hover over nodes for detailed information
+
+See [PACKAGE_GROUPING.md](PACKAGE_GROUPING.md) for complete visualization documentation.
 
 ## Use Cases
 
@@ -149,6 +194,7 @@ Node groups: function=1, method=2, type=3 (useful for coloring in visualizations
 - **Code Analysis**: Understand how functions and types interact within your project
 - **Refactoring Support**: Identify impact of changes to functions or types
 - **Documentation**: Auto-generate dependency documentation for your project
+- **Architecture Review**: Visualize package structure and cross-package dependencies
 
 ## Technical Details
 
