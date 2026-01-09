@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go Dependency Graph - Cosmograph</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #111111;
+            color: #eeeeee;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        #graph-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 15px 20px;
+            border-radius: 8px;
+            pointer-events: none;
+            max-width: 400px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        #ui h2 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: #00d488;
+        }
+
+        #hover-label {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #ffffff;
+        }
+
+        #hover-detail {
+            font-size: 13px;
+            color: #bbbbbb;
+            line-height: 1.6;
+        }
+
+        #controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 15px;
+            border-radius: 8px;
+            z-index: 100;
+            max-width: 250px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            pointer-events: all;
+        }
+
+        #controls h3 {
+            margin: 0 0 12px 0;
+            font-size: 14px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 8px;
+            color: #00d488;
+        }
+
+        #controls button {
+            width: 100%;
+            margin-top: 8px;
+            padding: 8px;
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.2s;
+        }
+
+        #controls button:hover {
+            background-color: #006cbd;
+        }
+
+        #legend {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+        }
+
+        #legend h4 {
+            margin: 0 0 10px 0;
+            font-size: 13px;
+            color: #00d488;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 6px 0;
+            font-size: 11px;
+        }
+
+        .legend-marker {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-right: 8px;
+            border: 1px solid #555;
+        }
+
+        #info {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 12px 15px;
+            border-radius: 8px;
+            font-size: 11px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+        }
+
+        #info strong {
+            color: #00d488;
+        }
+    </style>
+</head>
+<body>
+    <div id="graph-container"></div>
+
+    <div id="ui">
+        <h2 id="hover-label">Hover over a node</h2>
+        <div id="hover-detail">
+            Move your mouse over nodes to see details about packages, types, functions, and methods in your Go codebase.
+        </div>
+    </div>
+
+    <div id="controls">
+        <h3>⚙️ Controls</h3>
+        <button id="fitBtn">Fit to View</button>
+        <button id="resetBtn">Reset Simulation</button>
+    </div>
+
+    <div id="legend">
+        <h4>📊 Node Types</h4>
+        <div class="legend-item">
+            <div class="legend-marker" style="background-color: rgba(255, 255, 255, 0.8); width: 20px; height: 20px;"></div>
+            <span>Package Hubs (large)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-marker" style="background-color: rgba(255, 255, 255, 0.6); width: 14px; height: 14px;"></div>
+            <span>Type Hubs (medium)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-marker" style="background-color: rgba(255, 255, 255, 0.4); width: 10px; height: 10px;"></div>
+            <span>Functions/Methods (small)</span>
+        </div>
+    </div>
+
+    <div id="info">
+        <strong>Cosmograph Visualization</strong><br>
+        Nodes: <span id="nodeCount">0</span> | Links: <span id="linkCount">0</span><br>
+        <small>💡 Scroll to zoom • Drag to pan • Hover for details</small>
+    </div>
+
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@cosmograph/cosmograph@2.0.1/index.js"></script>
+
+    <script>
+        // Embedded data - will be injected by Go template
+        const data = {{.Data}};
+
+        console.log("Loaded Cosmograph data:", data);
+
+        // Wait for Cosmograph library to load before initializing
+        function initializeCosmograph() {
+            // Check if Cosmograph is available
+            if (typeof Cosmograph === 'undefined') {
+                console.error('Cosmograph library not loaded, retrying...');
+                setTimeout(initializeCosmograph, 100);
+                return;
+            }
+
+            // Update info display
+            document.getElementById("nodeCount").textContent = data.nodes.length;
+            document.getElementById("linkCount").textContent = data.links.length;
+
+            // Get the container element
+            const container = document.getElementById('graph-container');
+
+            // Cosmograph configuration optimized for Go dependency graphs
+            const config = {
+            backgroundColor: '#111111',
+
+            // Node appearance
+            nodeColor: n => n.color,
+            nodeSize: n => n.size,
+            nodeGreyoutOpacity: 0.2,
+
+            // Link appearance
+            linkWidth: 0.5,
+            linkColor: '#555555',
+            linkArrows: true,
+            linkArrowsSizeScale: 0.5,
+
+            // Hover effects
+            hoveredNodeLabelColor: '#ffffff',
+            hoveredNodeLabelSize: 14,
+            focusedNodeRingColor: '#00d488',
+
+            // Physics simulation - tuned for Hub & Spoke topology
+            simulation: {
+                repulsion: 1.2,           // Push nodes apart
+                repulsionTheta: 1.7,      // Barnes-Hut approximation (faster)
+                gravity: 0.5,             // Pull loose nodes to center
+                linkDistance: 10,         // Keep connected nodes close
+                linkSpring: 1.0,          // Strong springs for dependencies
+                friction: 0.85,           // Damping factor
+                decay: 10000,             // Simulation decay time (ms)
+            },
+
+            // Performance optimizations
+            renderLinks: true,
+            renderHoveredNodeLabel: true,
+            pixelRatio: window.devicePixelRatio || 1,
+
+            // Disable expensive features for large graphs
+            spaceSize: 4096,
+
+            // Events
+            onClick: (clickedNode) => {
+                if (clickedNode) {
+                    // Show alert with node details
+                    let details = `Name: ${clickedNode.label}\n`;
+                    details += `Type: ${clickedNode.type}\n`;
+                    details += `ID: ${clickedNode.id}`;
+                    alert(details);
+                }
+            },
+
+            onNodeMouseOver: (hoveredNode) => {
+                if (hoveredNode) {
+                    document.getElementById('hover-label').textContent = hoveredNode.label;
+
+                    let detailText = '';
+                    switch (hoveredNode.type) {
+                        case 'package':
+                            detailText = `<strong>Package Hub</strong><br>`;
+                            detailText += `This is a gravitational center for all code in the package.<br>`;
+                            detailText += `Package: ${hoveredNode.label}`;
+                            break;
+                        case 'type':
+                            detailText = `<strong>Type Hub</strong><br>`;
+                            detailText += `This represents a Go type/struct.<br>`;
+                            detailText += `Type: ${hoveredNode.label}`;
+                            break;
+                        case 'function':
+                            detailText = `<strong>Function</strong><br>`;
+                            detailText += `A package-level function.<br>`;
+                            detailText += `Function: ${hoveredNode.label}`;
+                            break;
+                        case 'method':
+                            detailText = `<strong>Method</strong><br>`;
+                            detailText += `A method on a type.<br>`;
+                            detailText += `Method: ${hoveredNode.label}`;
+                            break;
+                        default:
+                            detailText = `<strong>${hoveredNode.type.toUpperCase()}</strong><br>`;
+                            detailText += `ID: ${hoveredNode.id}`;
+                    }
+
+                    document.getElementById('hover-detail').innerHTML = detailText;
+                }
+            },
+
+            onNodeMouseOut: () => {
+                document.getElementById('hover-label').textContent = 'Hover over a node';
+                document.getElementById('hover-detail').innerHTML = 'Move your mouse over nodes to see details about packages, types, functions, and methods in your Go codebase.';
+            }
+        };
+
+        // Initialize Cosmograph
+        console.log("Initializing Cosmograph with", data.nodes.length, "nodes and", data.links.length, "links");
+        const graph = new Cosmograph(container, config);
+
+        // Set the data and start simulation
+        graph.setData(data.nodes, data.links);
+
+        // Controls
+        document.getElementById('fitBtn').addEventListener('click', () => {
+            graph.fitView();
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            // Restart the simulation
+            graph.setData(data.nodes, data.links);
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            graph.fitView();
+        });
+
+        // Fit view on initial load (after a brief delay for layout to start)
+        setTimeout(() => {
+            graph.fitView();
+        }, 1000);
+
+        console.log("Cosmograph visualization initialized successfully");
+    }
+
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeCosmograph);
+    } else {
+        // DOM already loaded, initialize immediately
+        initializeCosmograph();
+    }
+    </script>
+</body>
+</html>
+

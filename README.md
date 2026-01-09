@@ -52,13 +52,14 @@ Analyze the current directory and output pretty JSON to STDOUT:
 - `-source <path>`: Specify the directory of the Go project to analyze (default: ".")
 - `-format <format>`: Specify the output format (default: "json")
     - `json`: JSON output with configurable formatting
-    - `d3js`: D3.js force-directed graph format
+    - `d3js`: D3.js force-directed graph format with Canvas rendering
+    - `cosmo`: Cosmograph GPU-accelerated format (supports 50k+ nodes)
 - `-config <json>`: JSON configuration object for the formatter (default: "{}")
     - Available config options:
         - `pretty` (bool): Enable pretty-printed output (default: true)
-        - `groupByPackage` (bool): WebCola hierarchical package grouping (default: true)
-        - `groupByType` (bool): WebCola type-level grouping for methods by receiver (default: true)
-        - `htmlPage` (bool): Generate self-contained HTML page with embedded visualization (default: false, d3js format only)
+        - `groupByPackage` (bool): WebCola hierarchical package grouping (default: true, d3js only)
+        - `groupByType` (bool): WebCola type-level grouping for methods by receiver (default: true, d3js only)
+        - `htmlPage` (bool): Generate self-contained HTML page with embedded visualization (default: false, d3js and cosmo)
 
 ### Examples
 
@@ -78,6 +79,18 @@ Generate D3.js with WebCola hierarchical grouping (package and type level):
 
 ```bash
 ./go-depmap -format=d3js -config='{"groupByPackage":true,"groupByType":true}'
+```
+
+Generate Cosmograph GPU-accelerated visualization (for large codebases):
+
+```bash
+./go-depmap -format=cosmo -config='{"htmlPage":true}' > viz.html
+```
+
+Generate interactive HTML visualization with D3.js:
+
+```bash
+./go-depmap -format=d3js -config='{"htmlPage":true}' > viz.html
 ```
 
 Generate D3.js without type-level grouping (flat package groups):
@@ -207,6 +220,59 @@ Compatible with D3.js force-directed graph visualizations with **WebCola hierarc
 - **Interactive visualization**: Self-contained HTML page generation with embedded D3.js/WebCola
 
 See [PACKAGE_GROUPING.md](PACKAGE_GROUPING.md) for detailed information about the grouping feature.
+
+### Cosmograph Format (cosmo)
+
+GPU-accelerated WebGL visualization optimized for large codebases (50,000+ nodes) using Hub & Spoke topology:
+
+```json
+{
+  "nodes": [
+    {
+      "id": "pkg:example.com/myapp",
+      "type": "package",
+      "label": "example.com/myapp",
+      "color": "#d82626",
+      "size": 10
+    },
+    {
+      "id": "type:example.com/myapp::MyType",
+      "type": "type",
+      "label": "MyType",
+      "color": "#e05151",
+      "size": 5
+    },
+    {
+      "id": "example.com/myapp::MyFunction",
+      "type": "function",
+      "label": "MyFunction",
+      "color": "#e87c7c",
+      "size": 2
+    }
+  ],
+  "links": [
+    {
+      "source": "type:example.com/myapp::MyType",
+      "target": "pkg:example.com/myapp"
+    },
+    {
+      "source": "example.com/myapp::MyFunction",
+      "target": "pkg:example.com/myapp"
+    }
+  ]
+}
+```
+
+**Features:**
+- **Hub & Spoke Topology**: Package and type hubs act as gravitational centers
+- **GPU-Accelerated**: Layout and rendering on GPU via WebGL (100x faster than CPU)
+- **Massive Scale**: Handles 50,000+ nodes smoothly at 60fps
+- **Color-Coded Packages**: Each package gets unique color, inherited by children
+- **Size Hierarchy**: Package hubs (10) > Type hubs (5) > Functions/Methods (2)
+- **Self-Contained HTML**: Embeds data and loads Cosmograph from CDN
+- **Interactive**: Zoom, pan, hover, click - all GPU-accelerated
+
+See [COSMOGRAPH_IMPLEMENTATION_SUMMARY.md](.ignored/COSMOGRAPH_IMPLEMENTATION_SUMMARY.md) for detailed information.
 
 ## Visualization
 
