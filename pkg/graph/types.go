@@ -13,26 +13,38 @@ const (
 
 // Node represents a code element in the dependency graph
 type Node struct {
-	ID        string   `json:"id"`        // Unique signature
-	Name      string   `json:"name"`      // Short name
-	Kind      NodeKind `json:"kind"`      // function, method, or type
-	Package   string   `json:"package"`   // Import path
-	File      string   `json:"file"`      // Source filename
-	Line      int      `json:"line"`      // Line number
-	Signature string   `json:"signature"` // Human readable signature
+	ID            string   `json:"id"`             // Unique signature
+	Name          string   `json:"name"`           // Short name
+	Kind          NodeKind `json:"kind"`           // function, method, or type
+	Package       string   `json:"package"`        // Import path
+	File          string   `json:"file"`           // Source filename
+	Line          int      `json:"line"`           // Line number
+	Signature     string   `json:"signature"`      // Human readable signature
+	SubgraphID    int      `json:"subgraph_id"`    // ID of the subgraph this node belongs to
+	SubgraphScore float64  `json:"subgraph_score"` // Score of the subgraph this node belongs to
+}
+
+// Subgraph represents a connected component in the dependency graph
+type Subgraph struct {
+	ID        int      `json:"id"`         // Unique subgraph identifier
+	NodeIDs   []string `json:"node_ids"`   // All node IDs in this subgraph
+	EdgeCount int      `json:"edge_count"` // Number of edges within this subgraph
+	Score     float64  `json:"score"`      // Computed score based on size and connectivity
 }
 
 // DependencyGraph represents the complete dependency graph with nodes and edges
 type DependencyGraph struct {
-	Nodes map[string]*Node    `json:"nodes"`
-	Edges map[string][]string `json:"edges"` // SourceID -> []TargetIDs
+	Nodes     map[string]*Node    `json:"nodes"`
+	Edges     map[string][]string `json:"edges"`     // SourceID -> []TargetIDs
+	Subgraphs []Subgraph          `json:"subgraphs"` // Connected components with scores
 }
 
 // NewDependencyGraph creates a new empty dependency graph
 func NewDependencyGraph() *DependencyGraph {
 	return &DependencyGraph{
-		Nodes: make(map[string]*Node),
-		Edges: make(map[string][]string),
+		Nodes:     make(map[string]*Node),
+		Edges:     make(map[string][]string),
+		Subgraphs: make([]Subgraph, 0),
 	}
 }
 

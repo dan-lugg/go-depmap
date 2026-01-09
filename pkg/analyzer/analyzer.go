@@ -169,4 +169,13 @@ func (a *Analyzer) analyzeDependencies() {
 			})
 		}
 	}
+
+	log.Println("Computing subgraphs...")
+	a.graph.ComputeSubgraphs()
+	log.Printf("Found %d subgraph(s)", len(a.graph.Subgraphs))
+	if len(a.graph.Subgraphs) > 0 {
+		largest := a.graph.GetLargestSubgraph()
+		log.Printf("Largest subgraph: %d nodes, %d edges, score: %.2f",
+			len(largest.NodeIDs), largest.EdgeCount, largest.Score)
+	}
 }
