@@ -64,7 +64,7 @@ func (w *CosmoWriter) Write(writer io.Writer, depGraph *graph.DependencyGraph, c
 }
 
 // convertToCosmoFormat converts DependencyGraph to Cosmograph format using Hub & Spoke model
-func convertToCosmoFormat(depGraph *graph.DependencyGraph, config Config) *CosmoGraph {
+func convertToCosmoFormat(depGraph *graph.DependencyGraph, _ Config) *CosmoGraph {
 	cosmoGraph := &CosmoGraph{
 		Nodes: make([]CosmoNode, 0),
 		Links: make([]CosmoLink, 0),
@@ -221,7 +221,7 @@ func writeCosmographHTML(writer io.Writer, cosmoGraph *CosmoGraph) error {
 	data := struct {
 		Data template.JS
 	}{
-		Data: template.JS(jsonData),
+		Data: template.JS(jsonData), // #nosec G203 - JSON data is safe, we control the marshaling
 	}
 
 	// Execute the template
@@ -231,12 +231,12 @@ func writeCosmographHTML(writer io.Writer, cosmoGraph *CosmoGraph) error {
 // Color conversion helpers
 func hslToHex(h, s, l int) string {
 	// Convert HSL to RGB
-	s_f := float64(s) / 100.0
-	l_f := float64(l) / 100.0
+	sF := float64(s) / 100.0
+	lF := float64(l) / 100.0
 
-	c := (1 - abs(2*l_f-1)) * s_f
+	c := (1 - abs(2*lF-1)) * sF
 	x := c * (1 - abs(float64((h/60)%2)-1))
-	m := l_f - c/2
+	m := lF - c/2
 
 	var r, g, b float64
 	switch {
@@ -255,15 +255,15 @@ func hslToHex(h, s, l int) string {
 	}
 
 	// Convert to 0-255 range
-	r_int := int((r + m) * 255)
-	g_int := int((g + m) * 255)
-	b_int := int((b + m) * 255)
+	rInt := int((r + m) * 255)
+	gInt := int((g + m) * 255)
+	bInt := int((b + m) * 255)
 
 	// Format as hex
-	return rgbToHex(r_int, g_int, b_int)
+	return rgbToHex(rInt, gInt, bInt)
 }
 
-func hexToHSL(hex string) (h, s, l int) {
+func hexToHSL(_ string) (h, s, l int) {
 	// Simple approximation - just return some values
 	// In production, would parse hex and convert properly
 	return 0, 70, 50

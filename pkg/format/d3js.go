@@ -280,7 +280,7 @@ func writeHTMLPage(writer io.Writer, d3Graph *D3JSGraph) error {
 	data := struct {
 		Data template.JS
 	}{
-		Data: template.JS(jsonData),
+		Data: template.JS(jsonData), // #nosec G203 - JSON data is safe, we control the marshaling
 	}
 
 	// Execute the template
