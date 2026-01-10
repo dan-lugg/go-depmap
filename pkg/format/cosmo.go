@@ -20,6 +20,7 @@ type CosmoNode struct {
 	ID    string  `json:"id"`
 	Type  string  `json:"type"` // "package", "type", "function", "method"
 	Label string  `json:"label"`
+	Group string  `json:"group"` // Fully qualified package name for grouping
 	Color string  `json:"color"`
 	Size  float64 `json:"size"`
 }
@@ -97,14 +98,20 @@ func convertToCosmoFormat(depGraph *graph.DependencyGraph, _ Config) *CosmoGraph
 		return hslToHex(h, s, l+amount)
 	}
 
+	// Helper to add node
+	addNode := func(node CosmoNode) {
+		cosmoGraph.Nodes = append(cosmoGraph.Nodes, node)
+	}
+
 	// Phase 1: Create package hub nodes
 	for _, node := range depGraph.Nodes {
 		if !packageHubs[node.Package] {
 			packageHubs[node.Package] = true
-			cosmoGraph.Nodes = append(cosmoGraph.Nodes, CosmoNode{
+			addNode(CosmoNode{
 				ID:    "pkg:" + node.Package,
 				Type:  "package",
 				Label: node.Package,
+				Group: node.Package, // Package is its own group
 				Color: getPackageColor(node.Package),
 				Size:  10.0, // Large hub node
 			})
@@ -118,18 +125,20 @@ func convertToCosmoFormat(depGraph *graph.DependencyGraph, _ Config) *CosmoGraph
 			if !typeHubs[typeID] {
 				typeHubs[typeID] = true
 				pkgColor := getPackageColor(node.Package)
-				cosmoGraph.Nodes = append(cosmoGraph.Nodes, CosmoNode{
+				addNode(CosmoNode{
 					ID:    typeID,
 					Type:  "type",
 					Label: node.Name,
+					Group: node.Package, // Group by package
 					Color: lightenColor(pkgColor, 10),
 					Size:  5.0, // Medium hub node
 				})
 
 				// Link type to its package
+				pkgHubID := "pkg:" + node.Package
 				cosmoGraph.Links = append(cosmoGraph.Links, CosmoLink{
 					Source: typeID,
-					Target: "pkg:" + node.Package,
+					Target: pkgHubID,
 				})
 			}
 		}
@@ -170,10 +179,11 @@ func convertToCosmoFormat(depGraph *graph.DependencyGraph, _ Config) *CosmoGraph
 			parentHub = "pkg:" + node.Package
 		}
 
-		cosmoGraph.Nodes = append(cosmoGraph.Nodes, CosmoNode{
+		addNode(CosmoNode{
 			ID:    node.ID,
 			Type:  nodeType,
 			Label: node.Name,
+			Group: node.Package, // Group by package
 			Color: lightenColor(pkgColor, 20),
 			Size:  nodeSize,
 		})

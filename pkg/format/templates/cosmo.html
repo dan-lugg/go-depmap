@@ -5,133 +5,56 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Go Dependency Graph - Cosmograph</title>
     <style>
-        body {
+        body, html {
             margin: 0;
             padding: 0;
+            width: 100%;
+            height: 100%;
             overflow: hidden;
-            background: #111111;
-            color: #eeeeee;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            font-family: sans-serif;
         }
 
         #graph-container {
-            width: 100vw;
-            height: 100vh;
-            position: relative;
+            width: 100%;
+            height: 100%;
+            display: block;
         }
 
-        #ui {
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            pointer-events: none;
+            font-size: 18px;
+        }
+
+        #info {
             position: absolute;
             top: 20px;
             left: 20px;
             background: rgba(0, 0, 0, 0.85);
             padding: 15px 20px;
             border-radius: 8px;
-            pointer-events: none;
+            color: #eeeeee;
             max-width: 400px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
         }
 
-        #ui h2 {
+        #info h2 {
             margin: 0 0 10px 0;
             font-size: 18px;
             font-weight: 600;
             color: #00d488;
         }
 
-        #hover-label {
-            font-size: 16px;
-            font-weight: 500;
-            margin-bottom: 8px;
-            color: #ffffff;
-        }
-
-        #hover-detail {
+        #info p {
+            margin: 5px 0;
             font-size: 13px;
             color: #bbbbbb;
-            line-height: 1.6;
-        }
-
-        #controls {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.85);
-            padding: 15px;
-            border-radius: 8px;
-            z-index: 100;
-            max-width: 250px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-            pointer-events: all;
-        }
-
-        #controls h3 {
-            margin: 0 0 12px 0;
-            font-size: 14px;
-            border-bottom: 1px solid #444;
-            padding-bottom: 8px;
-            color: #00d488;
-        }
-
-        #controls button {
-            width: 100%;
-            margin-top: 8px;
-            padding: 8px;
-            background-color: #0078d4;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-            transition: background-color 0.2s;
-        }
-
-        #controls button:hover {
-            background-color: #006cbd;
-        }
-
-        #legend {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            background: rgba(0, 0, 0, 0.85);
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-            pointer-events: none;
-        }
-
-        #legend h4 {
-            margin: 0 0 10px 0;
-            font-size: 13px;
-            color: #00d488;
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            margin: 6px 0;
-            font-size: 11px;
-        }
-
-        .legend-marker {
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            margin-right: 8px;
-            border: 1px solid #555;
-        }
-
-        #info {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.85);
-            padding: 12px 15px;
-            border-radius: 8px;
-            font-size: 11px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-            pointer-events: none;
         }
 
         #info strong {
@@ -140,209 +63,108 @@
     </style>
 </head>
 <body>
-    <div id="graph-container"></div>
 
-    <div id="ui">
-        <h2 id="hover-label">Hover over a node</h2>
-        <div id="hover-detail">
-            Move your mouse over nodes to see details about packages, types, functions, and methods in your Go codebase.
-        </div>
-    </div>
+<div id="loading">Loading Cosmograph Visualization...</div>
+<div id="graph-container"></div>
 
-    <div id="controls">
-        <h3>⚙️ Controls</h3>
-        <button id="fitBtn">Fit to View</button>
-        <button id="resetBtn">Reset Simulation</button>
-    </div>
+<div id="info">
+    <h2>Go Dependency Graph</h2>
+    <p><strong>Nodes:</strong> <span id="nodeCount">0</span></p>
+    <p><strong>Links:</strong> <span id="linkCount">0</span></p>
+    <p style="font-size: 11px; margin-top: 10px;">💡 Scroll to zoom • Drag to pan • Click nodes for details</p>
+</div>
 
-    <div id="legend">
-        <h4>📊 Node Types</h4>
-        <div class="legend-item">
-            <div class="legend-marker" style="background-color: rgba(255, 255, 255, 0.8); width: 20px; height: 20px;"></div>
-            <span>Package Hubs (large)</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-marker" style="background-color: rgba(255, 255, 255, 0.6); width: 14px; height: 14px;"></div>
-            <span>Type Hubs (medium)</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-marker" style="background-color: rgba(255, 255, 255, 0.4); width: 10px; height: 10px;"></div>
-            <span>Functions/Methods (small)</span>
-        </div>
-    </div>
+<script type="module">
+  // Import Cosmograph and the data preparation helper from esm.sh CDN
+  import {Cosmograph, prepareCosmographData} from 'https://esm.sh/@cosmograph/cosmograph@2?bundle';
 
-    <div id="info">
-        <strong>Cosmograph Visualization</strong><br>
-        Nodes: <span id="nodeCount">0</span> | Links: <span id="linkCount">0</span><br>
-        <small>💡 Scroll to zoom • Drag to pan • Hover for details</small>
-    </div>
+  // Embedded data - will be injected by Go template
+  // @formatter:off
+  const data = {{ .Data }};
+  // @formatter:on
 
-    <script type="module">
-      // Import Cosmograph directly from a CDN
-      // You can use esm.sh or jsdelivr
-      import { Cosmograph } from 'https://esm.sh/@cosmograph/cosmograph?bundle';
+  console.log("Loaded data:", data);
+  console.log("Sample node:", data.nodes[0]);
+  console.log("Sample link:", data.links[0]);
 
-      console.log("Cosmograph module loaded:", Cosmograph);
+  // --- Configuration & Initialization ---
 
-        // Embedded data - will be injected by Go template
-        const data = {{.Data}};
+  async function run() {
+    const container = document.getElementById('graph-container');
+    const loading = document.getElementById('loading');
 
-        console.log("Loaded Cosmograph data:", data);
+    // Update info display
+    document.getElementById("nodeCount").textContent = data.nodes.length;
+    document.getElementById("linkCount").textContent = data.links.length;
 
-        // Wait for Cosmograph library to load before initializing
-        function initializeCosmograph() {
-            // Check if Cosmograph is available
-            if (typeof Cosmograph === 'undefined') {
-                console.error('Cosmograph library not loaded, retrying...');
-                setTimeout(initializeCosmograph, 1000);
-                return;
-            }
+    // Define how Cosmograph should read our data
+    const dataConfig = {
+      points: {
+        pointIdBy: 'id',
+        pointColorBy: 'group', // This separates the nodes visually by package
+        pointSizeBy: 'size',
+        pointClusterBy: 'group', // This groups nodes by type (e.g., package, module)
+        pointLabelBy: 'label' // Label for each node
+      },
+      links: {
+        linkSourceBy: 'source',
+        linkTargetsBy: ['target'] // Note: Must be an array of strings
+      }
+    };
 
-            // Update info display
-            document.getElementById("nodeCount").textContent = data.nodes.length;
-            document.getElementById("linkCount").textContent = data.links.length;
+    try {
+      console.log("Preparing data with Cosmograph...");
 
-            // Get the container element
-            const container = document.getElementById('graph-container');
+      // Prepare data (required for Cosmograph v2+)
+      // This indexes the data for high-performance rendering
+      const processed = await prepareCosmographData(
+          dataConfig,
+          data.nodes,
+          data.links
+      );
 
-            // Cosmograph configuration optimized for Go dependency graphs
-            const config = {
-            backgroundColor: '#111111',
+      console.log("Data prepared, initializing graph...");
 
-            // Node appearance
-            nodeColor: n => n.color,
-            nodeSize: n => n.size,
-            nodeGreyoutOpacity: 0.2,
+      // Initialize the Graph
+      const graph = new Cosmograph(container, {
+        // Pass the processed data buffers
+        points: processed.points,
+        links: processed.links,
 
-            // Link appearance
-            linkWidth: 0.5,
-            linkColor: '#555555',
-            linkArrows: true,
-            linkArrowsSizeScale: 0.5,
+        // Spread the generated config (contains accessors for colors/sizes)
+        ...processed.cosmographConfig,
 
-            // Hover effects
-            hoveredNodeLabelColor: '#ffffff',
-            hoveredNodeLabelSize: 14,
-            focusedNodeRingColor: '#00d488',
+        // Visual Customization
+        backgroundColor: '#1a1a1a',
+        pointSizeScale: 1.5,
+        linkWidth: 1,
+        linkColor: '#555555',
+        linkArrows: true,
 
-            // Physics simulation - tuned for Hub & Spoke topology
-            simulation: {
-                repulsion: 1.2,           // Push nodes apart
-                repulsionTheta: 1.7,      // Barnes-Hut approximation (faster)
-                gravity: 0.5,             // Pull loose nodes to center
-                linkDistance: 10,         // Keep connected nodes close
-                linkSpring: 1.0,          // Strong springs for dependencies
-                friction: 0.85,           // Damping factor
-                decay: 10000,             // Simulation decay time (ms)
-            },
+        // Simulation Physics (adjust to make groups tighter)
+        simulationGravity: 0.05,
+        simulationRepulsion: 0.5,
+        simulationFriction: 0.975,
 
-            // Performance optimizations
-            renderLinks: true,
-            renderHoveredNodeLabel: true,
-            pixelRatio: window.devicePixelRatio || 1,
+        // Interaction
+        hoveredPointColor: '#ffffff',
+        onClick: (index) => {
+          if (index == null) return;
+          const node = data.nodes[index];
+          alert(`Node Details:\n\nName: ${node.label}\nType: ${node.type}\nPackage: ${node.group}\nID: ${node.id}`);
+        },
+      });
 
-            // Disable expensive features for large graphs
-            spaceSize: 4096,
+      loading.style.display = 'none';
+      console.log("Cosmograph visualization initialized successfully");
 
-            // Events
-            onClick: (clickedNode) => {
-                if (clickedNode) {
-                    // Show alert with node details
-                    let details = `Name: ${clickedNode.label}\n`;
-                    details += `Type: ${clickedNode.type}\n`;
-                    details += `ID: ${clickedNode.id}`;
-                    alert(details);
-                }
-            },
-
-            onNodeMouseOver: (hoveredNode) => {
-                if (hoveredNode) {
-                    document.getElementById('hover-label').textContent = hoveredNode.label;
-
-                    let detailText = '';
-                    switch (hoveredNode.type) {
-                        case 'package':
-                            detailText = `<strong>Package Hub</strong><br>`;
-                            detailText += `This is a gravitational center for all code in the package.<br>`;
-                            detailText += `Package: ${hoveredNode.label}`;
-                            break;
-                        case 'type':
-                            detailText = `<strong>Type Hub</strong><br>`;
-                            detailText += `This represents a Go type/struct.<br>`;
-                            detailText += `Type: ${hoveredNode.label}`;
-                            break;
-                        case 'function':
-                            detailText = `<strong>Function</strong><br>`;
-                            detailText += `A package-level function.<br>`;
-                            detailText += `Function: ${hoveredNode.label}`;
-                            break;
-                        case 'method':
-                            detailText = `<strong>Method</strong><br>`;
-                            detailText += `A method on a type.<br>`;
-                            detailText += `Method: ${hoveredNode.label}`;
-                            break;
-                        default:
-                            detailText = `<strong>${hoveredNode.type.toUpperCase()}</strong><br>`;
-                            detailText += `ID: ${hoveredNode.id}`;
-                    }
-
-                    document.getElementById('hover-detail').innerHTML = detailText;
-                }
-            },
-
-            onNodeMouseOut: () => {
-                document.getElementById('hover-label').textContent = 'Hover over a node';
-                document.getElementById('hover-detail').innerHTML = 'Move your mouse over nodes to see details about packages, types, functions, and methods in your Go codebase.';
-            }
-        };
-
-        // Initialize Cosmograph with data directly in constructor
-        console.log("Initializing Cosmograph with", data.nodes.length, "nodes and", data.links.length, "links");
-        const graph = new Cosmograph(container, {
-            ...config,
-            // Pass data directly to constructor
-        });
-
-        // Set the data using setConfig method
-        graph.setConfig({
-            ...config,
-            data: data
-        });
-
-        // Controls
-        document.getElementById('fitBtn').addEventListener('click', () => {
-            graph.fitView();
-        });
-
-        document.getElementById('resetBtn').addEventListener('click', () => {
-            // Restart the simulation by reconfiguring
-            graph.setConfig({
-                ...config,
-                data: data
-            });
-        });
-
-        // Handle window resize
-        window.addEventListener('resize', () => {
-            graph.fitView();
-        });
-
-        // Fit view on initial load (after a brief delay for layout to start)
-        setTimeout(() => {
-            graph.fitView();
-        }, 1000);
-
-        console.log("Cosmograph visualization initialized successfully");
+    } catch (error) {
+      console.error("Error initializing Cosmograph:", error);
+      loading.textContent = "Error loading graph. Check console.";
     }
+  }
 
-    // Initialize when DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeCosmograph);
-    } else {
-        // DOM already loaded, initialize immediately
-        initializeCosmograph();
-    }
-    </script>
+  run();
+</script>
 </body>
 </html>
-
