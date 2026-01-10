@@ -177,9 +177,13 @@
         <small>💡 Scroll to zoom • Drag to pan • Hover for details</small>
     </div>
 
-    <script type="module" src="https://cdn.jsdelivr.net/npm/@cosmograph/cosmograph@2.0.1/index.js"></script>
+    <script type="module">
+      // Import Cosmograph directly from a CDN
+      // You can use esm.sh or jsdelivr
+      import { Cosmograph } from 'https://esm.sh/@cosmograph/cosmograph?bundle';
 
-    <script>
+      console.log("Cosmograph module loaded:", Cosmograph);
+
         // Embedded data - will be injected by Go template
         const data = {{.Data}};
 
@@ -190,7 +194,7 @@
             // Check if Cosmograph is available
             if (typeof Cosmograph === 'undefined') {
                 console.error('Cosmograph library not loaded, retrying...');
-                setTimeout(initializeCosmograph, 100);
+                setTimeout(initializeCosmograph, 1000);
                 return;
             }
 
@@ -292,12 +296,18 @@
             }
         };
 
-        // Initialize Cosmograph
+        // Initialize Cosmograph with data directly in constructor
         console.log("Initializing Cosmograph with", data.nodes.length, "nodes and", data.links.length, "links");
-        const graph = new Cosmograph(container, config);
+        const graph = new Cosmograph(container, {
+            ...config,
+            // Pass data directly to constructor
+        });
 
-        // Set the data and start simulation
-        graph.setData(data.nodes, data.links);
+        // Set the data using setConfig method
+        graph.setConfig({
+            ...config,
+            data: data
+        });
 
         // Controls
         document.getElementById('fitBtn').addEventListener('click', () => {
@@ -305,8 +315,11 @@
         });
 
         document.getElementById('resetBtn').addEventListener('click', () => {
-            // Restart the simulation
-            graph.setData(data.nodes, data.links);
+            // Restart the simulation by reconfiguring
+            graph.setConfig({
+                ...config,
+                data: data
+            });
         });
 
         // Handle window resize
