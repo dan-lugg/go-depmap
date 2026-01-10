@@ -108,7 +108,8 @@
       },
       links: {
         linkSourceBy: 'source',
-        linkTargetsBy: ['target'] // Note: Must be an array of strings
+        linkTargetsBy: ['target'], // Note: Must be an array of strings
+        linkWidthBy: 'linkType' // Use linkType to determine width
       }
     };
 
@@ -137,14 +138,18 @@
         // Visual Customization
         backgroundColor: '#1a1a1a',
         pointSizeScale: 1.5,
-        linkWidth: 1,
-        linkColor: '#555555',
+        linkWidth: 0.5, // Fixed width for all links
+        linkColor: '#555555', // Neutral gray for all links
         linkArrows: true,
+        linkArrowsSizeScale: 0.5,
 
-        // Simulation Physics (adjust to make groups tighter)
-        simulationGravity: 0.05,
-        simulationRepulsion: 0.5,
-        simulationFriction: 0.975,
+        // Simulation Physics (tuned for hub-and-spoke with packages, types, and functions)
+        simulationGravity: 0.1, // Slightly increased to pull nodes toward center
+        simulationRepulsion: 0.8, // Increased to push nodes apart more
+        simulationFriction: 0.985,
+        simulationDecay: 500, // Fast cooldown - nodes settle quickly
+        simulationLinkSpring: 1.5, // Stronger springs for dependencies
+        simulationLinkDistance: 20, // Distance between connected nodes
 
         // Interaction
         hoveredPointColor: '#ffffff',

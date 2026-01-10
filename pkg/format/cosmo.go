@@ -27,8 +27,9 @@ type CosmoNode struct {
 
 // CosmoLink represents a link in Cosmograph format
 type CosmoLink struct {
-	Source string `json:"source"`
-	Target string `json:"target"`
+	Source   string `json:"source"`
+	Target   string `json:"target"`
+	LinkType string `json:"linkType"` // "structural-package", "structural-type", "dependency"
 }
 
 // CosmoGraph is the complete data structure for Cosmograph
@@ -107,13 +108,14 @@ func convertToCosmoFormat(depGraph *graph.DependencyGraph, _ Config) *CosmoGraph
 	for _, node := range depGraph.Nodes {
 		if !packageHubs[node.Package] {
 			packageHubs[node.Package] = true
+			pkgColor := getPackageColor(node.Package)
 			addNode(CosmoNode{
 				ID:    "pkg:" + node.Package,
 				Type:  "package",
 				Label: node.Package,
-				Group: node.Package, // Package is its own group
-				Color: getPackageColor(node.Package),
-				Size:  10.0, // Large hub node
+				Group: node.Package,               // Package is its own group
+				Color: lightenColor(pkgColor, 35), // Very light color for packages
+				Size:  15.0,                       // Very large hub node
 			})
 		}
 	}
@@ -129,16 +131,17 @@ func convertToCosmoFormat(depGraph *graph.DependencyGraph, _ Config) *CosmoGraph
 					ID:    typeID,
 					Type:  "type",
 					Label: node.Name,
-					Group: node.Package, // Group by package
-					Color: lightenColor(pkgColor, 10),
-					Size:  5.0, // Medium hub node
+					Group: node.Package,               // Group by package
+					Color: lightenColor(pkgColor, 15), // Moderately colored
+					Size:  8.0,                        // Medium hub node
 				})
 
-				// Link type to its package
+				// Link type to its package (structural link - thin)
 				pkgHubID := "pkg:" + node.Package
 				cosmoGraph.Links = append(cosmoGraph.Links, CosmoLink{
-					Source: typeID,
-					Target: pkgHubID,
+					Source:   typeID,
+					Target:   pkgHubID,
+					LinkType: "structural-package",
 				})
 			}
 		}
@@ -149,16 +152,18 @@ func convertToCosmoFormat(depGraph *graph.DependencyGraph, _ Config) *CosmoGraph
 		var nodeType string
 		var nodeSize float64
 		var parentHub string
+		var structuralLinkType string
 		pkgColor := getPackageColor(node.Package)
 
 		switch node.Kind {
 		case graph.KindFunction:
 			nodeType = "function"
-			nodeSize = 2.0
+			nodeSize = 4.0 // Larger than before, but smaller than types
 			parentHub = "pkg:" + node.Package
+			structuralLinkType = "structural-package"
 		case graph.KindMethod:
 			nodeType = "method"
-			nodeSize = 2.0
+			nodeSize = 4.0 // Same as function
 			// Try to find the receiver type
 			receiverType := extractReceiverType(node.Name)
 			if receiverType != "" {
@@ -166,17 +171,22 @@ func convertToCosmoFormat(depGraph *graph.DependencyGraph, _ Config) *CosmoGraph
 				// If type hub doesn't exist, fall back to package
 				if !typeHubs[parentHub] {
 					parentHub = "pkg:" + node.Package
+					structuralLinkType = "structural-package"
+				} else {
+					structuralLinkType = "structural-type"
 				}
 			} else {
 				parentHub = "pkg:" + node.Package
+				structuralLinkType = "structural-package"
 			}
 		case graph.KindType:
 			// Already added as hub, skip
 			continue
 		default:
 			nodeType = "unknown"
-			nodeSize = 2.0
+			nodeSize = 4.0
 			parentHub = "pkg:" + node.Package
+			structuralLinkType = "structural-package"
 		}
 
 		addNode(CosmoNode{
@@ -184,18 +194,19 @@ func convertToCosmoFormat(depGraph *graph.DependencyGraph, _ Config) *CosmoGraph
 			Type:  nodeType,
 			Label: node.Name,
 			Group: node.Package, // Group by package
-			Color: lightenColor(pkgColor, 20),
+			Color: pkgColor,     // Bright, full color for functions
 			Size:  nodeSize,
 		})
 
-		// Link to parent hub (structural edge - opaque)
+		// Link to parent hub (structural edge)
 		cosmoGraph.Links = append(cosmoGraph.Links, CosmoLink{
-			Source: node.ID,
-			Target: parentHub,
+			Source:   node.ID,
+			Target:   parentHub,
+			LinkType: structuralLinkType,
 		})
 	}
 
-	// Phase 4: Add dependency edges (function -> function)
+	// Phase 4: Add dependency edges (function -> function, function -> type, type -> type)
 	for sourceID, targets := range depGraph.Edges {
 		for _, targetID := range targets {
 			// Skip if target doesn't exist in graph
@@ -204,8 +215,9 @@ func convertToCosmoFormat(depGraph *graph.DependencyGraph, _ Config) *CosmoGraph
 			}
 
 			cosmoGraph.Links = append(cosmoGraph.Links, CosmoLink{
-				Source: sourceID,
-				Target: targetID,
+				Source:   sourceID,
+				Target:   targetID,
+				LinkType: "dependency",
 			})
 		}
 	}
