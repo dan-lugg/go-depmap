@@ -23,6 +23,8 @@ func GetFormatWriter(format string) Writer {
 		return &D3JSWriter{}
 	case "cosmo":
 		return &CosmoWriter{}
+	case "antvg6":
+		return &AntVG6Writer{}
 	default:
 		// Default to JSON
 		return &JSONWriter{}

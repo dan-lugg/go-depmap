@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go Dependency Graph - AntV G6</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            font-family: sans-serif;
+        }
+
+        #graph-container {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            pointer-events: none;
+            font-size: 18px;
+        }
+
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: #eeeeee;
+            max-width: 400px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        #info h2 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: #00d488;
+        }
+
+        #info p {
+            margin: 5px 0;
+            font-size: 13px;
+            color: #bbbbbb;
+        }
+
+        #info strong {
+            color: #00d488;
+        }
+    </style>
+</head>
+<body>
+
+<div id="loading">Loading AntV G6 Visualization...</div>
+<div id="graph-container"></div>
+
+<div id="info">
+    <h2>Go Dependency Graph</h2>
+    <p><strong>Nodes:</strong> <span id="nodeCount">0</span></p>
+    <p><strong>Links:</strong> <span id="linkCount">0</span></p>
+    <p><strong>Packages:</strong> <span id="packageCount">0</span></p>
+    <p style="font-size: 11px; margin-top: 10px;">💡 Scroll to zoom • Drag to pan • Click nodes for details</p>
+</div>
+
+<script src="https://unpkg.com/@antv/g6@4.8.24/dist/g6.min.js"></script>
+<script>
+  // G6 v4 is available as global G6 (not window.G6)
+
+  // Embedded data - will be injected by Go template
+  // @formatter:off
+  const data = {{ .Data }};
+  // @formatter:on
+
+  console.log("Loaded data:", data);
+  console.log("Sample node:", data.nodes[0]);
+  console.log("Sample edge:", data.edges[0]);
+  console.log("Sample combo:", data.combos ? data.combos[0] : "No combos");
+
+  // --- Configuration & Initialization ---
+
+  async function run() {
+    const container = document.getElementById('graph-container');
+    const loading = document.getElementById('loading');
+
+    // Count packages
+    const packages = new Set(data.combos ? data.combos.map(c => c.id) : []);
+
+    // Update info display
+    document.getElementById("nodeCount").textContent = data.nodes.length;
+    document.getElementById("linkCount").textContent = data.edges.length;
+    document.getElementById("packageCount").textContent = packages.size;
+
+    try {
+      console.log("Initializing AntV G6 graph...");
+
+      // Create the graph instance with G6 v4 API
+      const graph = new G6.Graph({
+        container: 'graph-container',
+        width: container.clientWidth,
+        height: container.clientHeight,
+        renderer: 'webgl', // WebGL renderer for performance
+        layout: {
+          type: 'force',
+          preventOverlap: true,
+          nodeSpacing: 30,
+          linkDistance: 150,
+          nodeStrength: -300,
+          edgeStrength: 0.1,
+          collideStrength: 0.8,
+          alphaDecay: 0.028,
+          // Use Barnes-Hut approximation for better performance with large graphs
+          alphaMin: 0.001,
+          clustering: true,
+          clusterNodeStrength: -5,
+        },
+        defaultNode: {
+          size: 30,
+          style: {
+            fill: '#5B8FF9',
+            stroke: '#fff',
+            lineWidth: 2,
+          },
+          labelCfg: {
+            style: {
+              fill: '#fff',
+              fontSize: 10,
+            },
+          },
+        },
+        defaultEdge: {
+          style: {
+            stroke: '#00d488',
+            lineWidth: 1,
+            endArrow: true,
+          },
+        },
+        defaultCombo: {
+          type: 'rect',
+          style: {
+            fill: 'rgba(100, 100, 200, 0.05)',
+            stroke: '#00d488',
+            lineWidth: 2,
+            lineDash: [5, 5],
+            radius: 8,
+          },
+          labelCfg: {
+            position: 'top',
+            style: {
+              fill: '#00d488',
+              fontSize: 12,
+              fontWeight: 'bold',
+            },
+          },
+        },
+        modes: {
+          default: ['drag-canvas', 'zoom-canvas', 'drag-node', 'drag-combo'],
+        },
+      });
+
+      // Load data using G6 v4 API
+      graph.data(data);
+      graph.render();
+
+      // Handle click events
+      graph.on('node:click', (evt) => {
+        const node = evt.item;
+        const model = node.getModel();
+        const nodeData = model.data;
+
+        alert(`Node Details:\n\nName: ${nodeData.label}\nType: ${nodeData.type}\nPackage: ${nodeData.group}\nID: ${model.id}`);
+      });
+
+      // Handle window resize
+      window.addEventListener('resize', () => {
+        graph.changeSize(container.clientWidth, container.clientHeight);
+        graph.fitView(20);
+      });
+
+      // Fit view after layout
+      setTimeout(() => {
+        graph.fitView(20);
+      }, 1000);
+
+      loading.style.display = 'none';
+      console.log("AntV G6 visualization initialized successfully");
+
+    } catch (error) {
+      console.error("Error initializing AntV G6:", error);
+      loading.textContent = "Error loading graph. Check console.";
+    }
+  }
+
+  run();
+</script>
+</body>
+</html>
+
